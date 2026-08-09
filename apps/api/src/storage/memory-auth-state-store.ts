@@ -1,4 +1,5 @@
 import type { AuthState, AuthStateStore } from "./auth-state.js";
+import { assertAuthState } from "./auth-state-validation.js";
 
 function createEmptyState(): AuthState {
   return {
@@ -16,6 +17,7 @@ export class MemoryAuthStateStore implements AuthStateStore {
   private updateQueue: Promise<void> = Promise.resolve();
 
   constructor(initialState: AuthState = createEmptyState()) {
+    assertAuthState(initialState);
     this.state = structuredClone(initialState);
   }
 
@@ -28,7 +30,8 @@ export class MemoryAuthStateStore implements AuthStateStore {
     const operation = this.updateQueue.then(async () => {
       const nextState = structuredClone(this.state);
       const result = await mutator(nextState);
-      this.state = nextState;
+      assertAuthState(nextState);
+      this.state = structuredClone(nextState);
       return result;
     });
 

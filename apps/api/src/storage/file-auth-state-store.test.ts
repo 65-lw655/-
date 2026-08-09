@@ -56,6 +56,19 @@ function makeAuditEvent(
   };
 }
 
+function makeStateWithAuditEvents(
+  ...auditEvents: StoredSecurityAuditEvent[]
+): AuthState {
+  return {
+    version: 1,
+    users: [],
+    sessions: [],
+    tickets: [],
+    loginAttempts: [],
+    auditEvents
+  };
+}
+
 async function writeExistingState(
   filePath: string,
   value: string
@@ -116,6 +129,53 @@ describe("FileAuthStateStore", () => {
     snapshot.auditEvents.push(makeAuditEvent());
 
     await expect(store.read((state) => state.auditEvents)).resolves.toEqual([]);
+  });
+
+  it("does not install a captured or returned draft reference", async () => {
+    const { filePath } = await makeStorePath();
+    const store = await FileAuthStateStore.open(filePath);
+    let captured!: AuthState;
+    let expected!: StoredSecurityAuditEvent[];
+
+    const returned = await store.update((state) => {
+      captured = state;
+      state.auditEvents.push(makeAuditEvent());
+      expected = structuredClone(state.auditEvents);
+      return state;
+    });
+
+    captured.auditEvents.push(makeAuditEvent("LOGIN_FAILED"));
+    returned.auditEvents.length = 0;
+
+    await expect(store.read((state) => state.auditEvents)).resolves.toEqual(
+      expected
+    );
+    const reopened = await FileAuthStateStore.open(filePath);
+    await expect(reopened.read((state) => state.auditEvents)).resolves.toEqual(
+      expected
+    );
+  });
+
+  it("does not retain an inserted object alias after commit", async () => {
+    const { filePath } = await makeStorePath();
+    const store = await FileAuthStateStore.open(filePath);
+    const inserted = makeAuditEvent();
+    const expected = structuredClone(inserted);
+
+    await store.update((state) => {
+      state.auditEvents.push(inserted);
+    });
+    inserted.event = "LOGIN_FAILED";
+    inserted.result = "DENIED";
+
+    await expect(store.read((state) => state.auditEvents)).resolves.toEqual([
+      expected
+    ]);
+    const reopened = await FileAuthStateStore.open(filePath);
+    const persisted = await reopened.read((state) => state.auditEvents);
+    await expect(store.read((state) => state.auditEvents)).resolves.toEqual(
+      persisted
+    );
   });
 
   it("serializes concurrent updates in call order", async () => {
@@ -262,6 +322,33 @@ describe("FileAuthStateStore", () => {
     await expect(FileAuthStateStore.open(filePath)).rejects.toThrow();
   });
 
+  it("rejects an existing state with a type-correct invalid timestamp", async () => {
+    const { filePath } = await makeStorePath();
+    const invalidEvent = makeAuditEvent();
+    invalidEvent.occurredAt = "not-an-iso-timestamp";
+    await writeExistingState(
+      filePath,
+      JSON.stringify(makeStateWithAuditEvents(invalidEvent))
+    );
+
+    await expect(FileAuthStateStore.open(filePath)).rejects.toThrow();
+  });
+
+  it("rejects a completed draft with an invalid timestamp", async () => {
+    const { filePath } = await makeStorePath();
+    const store = await FileAuthStateStore.open(filePath);
+
+    await expect(
+      store.update((state) => {
+        const invalidEvent = makeAuditEvent();
+        invalidEvent.occurredAt = "not-an-iso-timestamp";
+        state.auditEvents.push(invalidEvent);
+      })
+    ).rejects.toThrow();
+
+    await expect(store.read((state) => state.auditEvents)).resolves.toEqual([]);
+  });
+
   it("persists only digests for runtime-generated credentials", async () => {
     const { filePath } = await makeStorePath();
     const password = generateOpaqueSecret();
@@ -364,6 +451,64 @@ describe("MemoryAuthStateStore", () => {
     ]);
   });
 
+  it("does not install a captured or returned draft reference", async () => {
+    const store = new MemoryAuthStateStore();
+    let captured!: AuthState;
+    let expected!: StoredSecurityAuditEvent[];
+
+    const returned = await store.update((state) => {
+      captured = state;
+      state.auditEvents.push(makeAuditEvent());
+      expected = structuredClone(state.auditEvents);
+      return state;
+    });
+
+    captured.auditEvents.push(makeAuditEvent("LOGIN_FAILED"));
+    returned.auditEvents.length = 0;
+
+    await expect(store.read((state) => state.auditEvents)).resolves.toEqual(
+      expected
+    );
+  });
+
+  it("does not retain an inserted object alias after commit", async () => {
+    const store = new MemoryAuthStateStore();
+    const inserted = makeAuditEvent();
+    const expected = structuredClone(inserted);
+
+    await store.update((state) => {
+      state.auditEvents.push(inserted);
+    });
+    inserted.event = "LOGIN_FAILED";
+    inserted.result = "DENIED";
+
+    await expect(store.read((state) => state.auditEvents)).resolves.toEqual([
+      expected
+    ]);
+  });
+
+  it("rejects an invalid initial timestamp", () => {
+    const invalidEvent = makeAuditEvent();
+    invalidEvent.occurredAt = "not-an-iso-timestamp";
+    const invalidState = makeStateWithAuditEvents(invalidEvent);
+
+    expect(() => new MemoryAuthStateStore(invalidState)).toThrow();
+  });
+
+  it("rejects a completed draft with an invalid timestamp", async () => {
+    const store = new MemoryAuthStateStore();
+
+    await expect(
+      store.update((state) => {
+        const invalidEvent = makeAuditEvent();
+        invalidEvent.occurredAt = "not-an-iso-timestamp";
+        state.auditEvents.push(invalidEvent);
+      })
+    ).rejects.toThrow();
+
+    await expect(store.read((state) => state.auditEvents)).resolves.toEqual([]);
+  });
+
   it("does not commit a failed update", async () => {
     const store = new MemoryAuthStateStore();
 
@@ -436,5 +581,25 @@ describe("createSecurityAuditEvent", () => {
         "occurredAt"
       ].sort()
     );
+  });
+
+  it("discards runtime extras and does not allow id replacement", () => {
+    const attemptedId = randomUUID();
+    const input = {
+      event: "LOGIN_FAILED",
+      result: "DENIED",
+      actorId: null,
+      targetId: null,
+      projectId: null,
+      sourceDigest: digestOpaqueSecret(generateOpaqueSecret()),
+      occurredAt: new Date().toISOString(),
+      id: attemptedId,
+      token: generateOpaqueSecret()
+    } as const;
+
+    const event = createSecurityAuditEvent(input);
+
+    expect(event.id === attemptedId).toBe(false);
+    expect(Object.hasOwn(event, "token")).toBe(false);
   });
 });

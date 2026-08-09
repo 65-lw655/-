@@ -21,6 +21,12 @@ export function createSecurityAuditEvent(
 ): StoredSecurityAuditEvent {
   return {
     id: randomUUID(),
-    ...input
+    event: input.event,
+    result: input.result,
+    actorId: input.actorId,
+    targetId: input.targetId,
+    projectId: input.projectId,
+    sourceDigest: input.sourceDigest,
+    occurredAt: input.occurredAt
   };
 }
