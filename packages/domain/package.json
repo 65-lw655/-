@@ -11,6 +11,6 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsup src/index.ts --format esm --clean"
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/index.js"
   }
 }

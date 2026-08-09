@@ -21,7 +21,8 @@
     "format:check": "prettier --check .",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest",
-    "build": "npm run build --workspaces --if-present"
+    "build": "npm run build --workspaces --if-present",
+    "verify": "npm run lint && npm run format:check && npm run typecheck && npm run test -- --run && npm run build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -33,13 +34,13 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
     "concurrently": "^10.0.4",
+    "esbuild": "^0.28.2",
     "eslint": "^10.8.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.9.0",
     "jsdom": "^29.1.1",
     "prettier": "^3.9.6",
-    "tsup": "^8.5.1",
     "tsx": "^4.23.11",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.66.0",
