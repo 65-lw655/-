@@ -318,7 +318,17 @@ git commit -m "feat: add password and session secret primitives"
 - Produces: `MemoryAuthStateStore` 和 `FileAuthStateStore.open(path)`。
 - Consumes: Task 1 的角色与状态类型。
 
-- [ ] **Step 1: Define the persisted state contract**
+- [ ] **Step 1: Write failing file-store tests**
+
+使用 `mkdtemp` 创建临时目录，覆盖：空路径初始化版本 1、`update` 后重新 `open` 可读取、并发调用按调用顺序串行、损坏 JSON 拒绝打开、错误格式版本拒绝、文件内容不包含运行时生成的密码/会话令牌/一次性码。
+
+- [ ] **Step 2: Run storage tests and verify RED**
+
+Run: `npm run test -- --run apps/api/src/storage/file-auth-state-store.test.ts`
+
+Expected: FAIL，因为存储实现不存在。
+
+- [ ] **Step 3: Define the persisted state contract**
 
 在 `auth-state.ts` 定义且只在 API 内部导出：
 
@@ -339,16 +349,6 @@ export interface AuthStateStore {
 ```
 
 `StoredUser` 包含 ID、规范化登录名、显示名、角色、账号状态、凭证状态、可空密码哈希和时间；会话及一次性凭证只包含摘要；审计不包含完整登录名或请求体。
-
-- [ ] **Step 2: Write failing file-store tests**
-
-使用 `mkdtemp` 创建临时目录，覆盖：空路径初始化版本 1、`update` 后重新 `open` 可读取、并发调用按调用顺序串行、损坏 JSON 拒绝打开、错误格式版本拒绝、文件内容不包含运行时生成的密码/会话令牌/一次性码。
-
-- [ ] **Step 3: Run storage tests and verify RED**
-
-Run: `npm run test -- --run apps/api/src/storage/file-auth-state-store.test.ts`
-
-Expected: FAIL，因为存储实现不存在。
 
 - [ ] **Step 4: Implement memory and file stores**
 
