@@ -94,7 +94,7 @@
 - Produces: `authorizeAction(context, action): AuthorizationDecision`。
 - Consumes: 无运行时依赖。
 
-- [ ] **Step 1: Write the failing authorization matrix test**
+- [x] **Step 1: Write the failing authorization matrix test**
 
 在 `authorization.test.ts` 建立运行时表格，逐条覆盖 M0 的 19 个示例。表格必须包含以下场景和结论：
 
@@ -124,13 +124,13 @@ const cases = [
 
 额外断言管理员跨项目写入和领导跨项目下载的成功结果包含 `auditRequired: true`，`AUDIT_MUTATE` 对所有角色都拒绝。
 
-- [ ] **Step 2: Run the domain test and verify RED**
+- [x] **Step 2: Run the domain test and verify RED**
 
 Run: `npm run test -- --run packages/domain/src/auth/authorization.test.ts`
 
 Expected: FAIL，因为 `auth/authorization.ts` 和导出类型尚不存在。
 
-- [ ] **Step 3: Add exact shared types**
+- [x] **Step 3: Add exact shared types**
 
 在 `types.ts` 定义：
 
@@ -183,11 +183,11 @@ export type AuthorizationDecision =
     };
 ```
 
-- [ ] **Step 4: Implement the minimal pure authorization function**
+- [x] **Step 4: Implement the minimal pure authorization function**
 
 判定顺序必须与设计第 10 节一致。`PROJECT_CREATE` 和 `USER_MANAGE` 不要求现有项目；其余项目动作先校验 `projectExists`。不读取客户端权限缓存，不引入类或策略注册表。
 
-- [ ] **Step 5: Verify and commit the domain**
+- [x] **Step 5: Verify and commit the domain**
 
 Run:
 
