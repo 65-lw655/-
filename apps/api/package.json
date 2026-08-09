@@ -1,0 +1,15 @@
+{
+  "name": "@project-online/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild src/server.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/server.js --sourcemap --external:fastify"
+  },
+  "dependencies": {
+    "@project-online/domain": "*",
+    "fastify": "^5.11.3"
+  }
+}
