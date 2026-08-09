@@ -1,0 +1,10 @@
+{
+  "name": "@project-online/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsup src/index.ts --format esm --dts --clean"
+  }
+}

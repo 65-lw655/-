@@ -1,1 +1,39 @@
 .worktrees/
+
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+target/
+
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+
+# Local operating-system files and caches
+.DS_Store
+Thumbs.db
+*.cache
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+
+# Credentials and certificates
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# Desktop artifacts
+src-tauri/target/
+*.dmg
+*.msi
+*.msix
+*.appx
+*.exe
+*.AppImage
