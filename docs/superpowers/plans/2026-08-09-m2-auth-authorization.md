@@ -402,7 +402,7 @@ git commit -m "feat: add local M2 authentication store"
 - Produces: `PublicUser`，不包含任何凭证字段。
 - Consumes: Tasks 1-3 的状态类型、`PasswordHasher`、秘密原语和 `AuthStateStore`。
 
-- [ ] **Step 1: Write failing account-lifecycle tests**
+- [x] **Step 1: Write failing account-lifecycle tests**
 
 使用 `MemoryAuthStateStore`、运行时生成的密码和测试 `PasswordHasher`，覆盖：
 
@@ -415,13 +415,13 @@ git commit -m "feat: add local M2 authentication store"
 - 不能停用最后一名有效管理员、撤销其角色或由其为自己签发重置码。
 - 所有 `PublicUser` 结果不存在 `passwordHash`、ticket 摘要和 session 摘要。
 
-- [ ] **Step 2: Run lifecycle tests and verify RED**
+- [x] **Step 2: Run lifecycle tests and verify RED**
 
 Run: `npm run test -- --run apps/api/src/modules/users/user-service.test.ts`
 
 Expected: FAIL，因为 `UserService` 不存在。
 
-- [ ] **Step 3: Implement explicit service inputs and outputs**
+- [x] **Step 3: Implement explicit service inputs and outputs**
 
 ```ts
 export interface AuthenticatedPrincipal {
@@ -445,11 +445,11 @@ export interface IssuedCredentialTicket {
 
 登录名使用 `trim().toLocaleLowerCase("en-US")` 规范化；公开输入限制为 3-64 个字符，显示名限制为 1-80 个 Unicode 码点。错误使用稳定的 `ServiceError(code, statusCode)`，消息不包含输入值。
 
-- [ ] **Step 4: Implement state transitions in store transactions**
+- [x] **Step 4: Implement state transitions in store transactions**
 
 开通、激活、重置、停用、角色变化和会话撤销必须各自在一次 `store.update` 中完成。一次性码明文只作为方法返回值存在，进入状态前立即摘要。所有成功和拒绝结果写有限安全审计。
 
-- [ ] **Step 5: Verify and commit user lifecycle**
+- [x] **Step 5: Verify and commit user lifecycle**
 
 Run:
 
