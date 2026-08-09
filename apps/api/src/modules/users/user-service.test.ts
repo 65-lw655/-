@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { SystemRole } from "@project-online/domain";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PasswordHasher } from "../auth/password.js";
 import { digestOpaqueSecret, generateOpaqueSecret } from "../auth/secrets.js";
@@ -53,6 +53,26 @@ class CountingAuthStateStore implements AuthStateStore {
 
   resetUpdateCalls(): void {
     this.updateCalls = 0;
+  }
+
+  async holdUpdateQueue(): Promise<{
+    release: () => void;
+    completed: Promise<void>;
+  }> {
+    let markStarted!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const completed = this.store.update(async () => {
+      markStarted();
+      await blocked;
+    });
+    await started;
+    return { release, completed };
   }
 }
 
@@ -245,6 +265,37 @@ describe("UserService", () => {
     });
   });
 
+  it("starts a new activation ticket TTL when its queued transaction executes", async () => {
+    const admin = await bootstrapAdmin();
+    const queuedAt = new Date(currentTime);
+    const queue = await store.holdUpdateQueue();
+    store.resetUpdateCalls();
+
+    const pending = service.createUser(principal(admin.id), {
+      username: `queued-create-${randomUUID()}`,
+      displayName: "Queued creation",
+      role: "USER"
+    });
+    await vi.waitFor(() => expect(store.updateCalls).toBe(1));
+    currentTime = new Date(queuedAt.getTime() + 60 * 60 * 1_000);
+    queue.release();
+    const issued = await pending;
+    await queue.completed;
+
+    expect(issued.user.createdAt).toBe(currentTime.toISOString());
+    expect(issued.expiresAt).toBe(
+      new Date(currentTime.getTime() + 24 * 60 * 60 * 1_000).toISOString()
+    );
+    expect(
+      await store.read((state) =>
+        state.tickets.find(({ userId }) => userId === issued.user.id)
+      )
+    ).toMatchObject({
+      createdAt: currentTime.toISOString(),
+      expiresAt: issued.expiresAt
+    });
+  });
+
   it("preserves a valid display name because only usernames are normalized", async () => {
     const admin = await bootstrapAdmin();
     const displayName = "  Padded display name  ";
@@ -397,6 +448,45 @@ describe("UserService", () => {
     });
   });
 
+  it("rejects ticket completion that crosses expiry while queued", async () => {
+    const admin = await bootstrapAdmin();
+    const issued = await service.createUser(principal(admin.id), {
+      username: `queued-activation-${randomUUID()}`,
+      displayName: "Queued activation",
+      role: "USER"
+    });
+    const expiresAt = Date.parse(issued.expiresAt);
+    currentTime = new Date(expiresAt - 1);
+    const queue = await store.holdUpdateQueue();
+    store.resetUpdateCalls();
+
+    const completion = service.activate({
+      ticket: issued.ticket,
+      password: makePassword()
+    });
+    await vi.waitFor(() => expect(store.updateCalls).toBe(1));
+    currentTime = new Date(expiresAt + 1);
+    queue.release();
+
+    await expectServiceError(completion, "INVALID_TICKET", 400);
+    await queue.completed;
+    expect(
+      await store.read((state) =>
+        state.tickets.find(
+          ({ ticketDigest }) =>
+            ticketDigest === digestOpaqueSecret(issued.ticket)
+        )
+      )
+    ).toMatchObject({ consumedAt: null });
+    expect(await store.read((state) => state.auditEvents.at(-1))).toMatchObject(
+      {
+        event: "USER_ACTIVATED",
+        result: "DENIED",
+        occurredAt: currentTime.toISOString()
+      }
+    );
+  });
+
   it("reissues activation for an active pending user and immediately invalidates old tickets", async () => {
     const admin = await bootstrapAdmin();
     const adminPrincipal = principal(admin.id);
@@ -437,6 +527,38 @@ describe("UserService", () => {
       "INVALID_ACCOUNT_STATE",
       409
     );
+  });
+
+  it("starts a reissued activation TTL when its queued transaction executes", async () => {
+    const admin = await bootstrapAdmin();
+    const adminPrincipal = principal(admin.id);
+    const original = await service.createUser(adminPrincipal, {
+      username: `queued-reissue-${randomUUID()}`,
+      displayName: "Queued reissue",
+      role: "USER"
+    });
+    const queuedAt = new Date(currentTime);
+    const queue = await store.holdUpdateQueue();
+    store.resetUpdateCalls();
+
+    const pending = service.reissueActivation(adminPrincipal, original.user.id);
+    await vi.waitFor(() => expect(store.updateCalls).toBe(1));
+    currentTime = new Date(queuedAt.getTime() + 2 * 60 * 60 * 1_000);
+    queue.release();
+    const replacement = await pending;
+    await queue.completed;
+
+    expect(replacement.expiresAt).toBe(
+      new Date(currentTime.getTime() + 24 * 60 * 60 * 1_000).toISOString()
+    );
+    const tickets = await store.read((state) =>
+      state.tickets.filter(({ userId }) => userId === original.user.id)
+    );
+    expect(tickets[0]?.consumedAt).toBe(currentTime.toISOString());
+    expect(tickets[1]).toMatchObject({
+      createdAt: currentTime.toISOString(),
+      expiresAt: replacement.expiresAt
+    });
   });
 
   it("disables a user and revokes every live session in one update", async () => {
@@ -547,6 +669,31 @@ describe("UserService", () => {
     );
   });
 
+  it("starts a password-reset TTL when its queued transaction executes", async () => {
+    const admin = await bootstrapAdmin();
+    const adminPrincipal = principal(admin.id);
+    const user = await createAndActivate(adminPrincipal);
+    const queuedAt = new Date(currentTime);
+    const queue = await store.holdUpdateQueue();
+    store.resetUpdateCalls();
+
+    const pending = service.issuePasswordReset(adminPrincipal, user.id);
+    await vi.waitFor(() => expect(store.updateCalls).toBe(1));
+    currentTime = new Date(queuedAt.getTime() + 5 * 60 * 1_000);
+    queue.release();
+    const reset = await pending;
+    await queue.completed;
+
+    expect(reset.expiresAt).toBe(
+      new Date(currentTime.getTime() + 30 * 60 * 1_000).toISOString()
+    );
+    expect(await store.read((state) => state.tickets.at(-1))).toMatchObject({
+      purpose: "PASSWORD_RESET",
+      createdAt: currentTime.toISOString(),
+      expiresAt: reset.expiresAt
+    });
+  });
+
   it("rejects expired reset tickets with the same public error", async () => {
     const admin = await bootstrapAdmin();
     const adminPrincipal = principal(admin.id);
@@ -599,6 +746,32 @@ describe("UserService", () => {
       "USER_CREATED",
       "USER_DISABLED"
     ]);
+    expect(deniedEvents.map(({ actorId }) => actorId)).toEqual([
+      member.id,
+      member.id,
+      null
+    ]);
+  });
+
+  it("keeps a known disabled administrator ID in denied audit events", async () => {
+    const admin = await bootstrapAdmin();
+    const adminPrincipal = principal(admin.id);
+    const secondAdmin = await createAndActivate(adminPrincipal, "ADMIN");
+    await service.disableUser(principal(secondAdmin.id), admin.id);
+
+    await expectServiceError(
+      service.listUsers(adminPrincipal),
+      "FORBIDDEN",
+      403
+    );
+
+    expect(await store.read((state) => state.auditEvents.at(-1))).toMatchObject(
+      {
+        event: "AUTHORIZATION_DENIED",
+        result: "DENIED",
+        actorId: admin.id
+      }
+    );
   });
 
   it("protects the last active and ready administrator from disable or demotion", async () => {

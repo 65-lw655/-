@@ -183,12 +183,11 @@ function isEffectiveAdmin(user: StoredUser): boolean {
   );
 }
 
-function findActiveAdmin(
+function findActor(
   state: AuthState,
   principal: AuthenticatedPrincipal
 ): StoredUser | undefined {
-  const actor = state.users.find(({ id }) => id === principal.userId);
-  return actor !== undefined && isEffectiveAdmin(actor) ? actor : undefined;
+  return state.users.find(({ id }) => id === principal.userId);
 }
 
 function revokeSessions(
@@ -274,14 +273,21 @@ export class UserService {
     }
     const ticket = this.dependencies.generateSecret();
     const ticketDigest = this.dependencies.digestSecret(ticket);
-    const now = this.now();
-    const expiresAt = this.expiresAt(now, ACTIVATION_TTL_MS);
 
     const result = await this.store.update<Result<IssuedCredentialTicket>>(
       (state) => {
-        const actor = findActiveAdmin(state, principal);
-        if (actor === undefined) {
-          this.audit(state, "USER_CREATED", "DENIED", null, null, now);
+        const now = this.now();
+        const expiresAt = this.expiresAt(now, ACTIVATION_TTL_MS);
+        const actor = findActor(state, principal);
+        if (actor === undefined || !isEffectiveAdmin(actor)) {
+          this.audit(
+            state,
+            "USER_CREATED",
+            "DENIED",
+            actor?.id ?? null,
+            null,
+            now
+          );
           return fail("FORBIDDEN");
         }
         if (
@@ -348,14 +354,21 @@ export class UserService {
   ): Promise<IssuedCredentialTicket> {
     const ticket = this.dependencies.generateSecret();
     const ticketDigest = this.dependencies.digestSecret(ticket);
-    const now = this.now();
-    const expiresAt = this.expiresAt(now, ACTIVATION_TTL_MS);
 
     const result = await this.store.update<Result<IssuedCredentialTicket>>(
       (state) => {
-        const actor = findActiveAdmin(state, principal);
-        if (actor === undefined) {
-          this.audit(state, "ACTIVATION_REISSUED", "DENIED", null, null, now);
+        const now = this.now();
+        const expiresAt = this.expiresAt(now, ACTIVATION_TTL_MS);
+        const actor = findActor(state, principal);
+        if (actor === undefined || !isEffectiveAdmin(actor)) {
+          this.audit(
+            state,
+            "ACTIVATION_REISSUED",
+            "DENIED",
+            actor?.id ?? null,
+            null,
+            now
+          );
           return fail("FORBIDDEN");
         }
         const user = state.users.find(({ id }) => id === userId);
@@ -490,14 +503,21 @@ export class UserService {
   ): Promise<IssuedCredentialTicket> {
     const ticket = this.dependencies.generateSecret();
     const ticketDigest = this.dependencies.digestSecret(ticket);
-    const now = this.now();
-    const expiresAt = this.expiresAt(now, PASSWORD_RESET_TTL_MS);
 
     const result = await this.store.update<Result<IssuedCredentialTicket>>(
       (state) => {
-        const actor = findActiveAdmin(state, principal);
-        if (actor === undefined) {
-          this.audit(state, "PASSWORD_RESET_ISSUED", "DENIED", null, null, now);
+        const now = this.now();
+        const expiresAt = this.expiresAt(now, PASSWORD_RESET_TTL_MS);
+        const actor = findActor(state, principal);
+        if (actor === undefined || !isEffectiveAdmin(actor)) {
+          this.audit(
+            state,
+            "PASSWORD_RESET_ISSUED",
+            "DENIED",
+            actor?.id ?? null,
+            null,
+            now
+          );
           return fail("FORBIDDEN");
         }
         const user = state.users.find(({ id }) => id === userId);
@@ -608,9 +628,16 @@ export class UserService {
   async listUsers(principal: AuthenticatedPrincipal): Promise<PublicUser[]> {
     const now = this.now();
     const result = await this.store.update<Result<PublicUser[]>>((state) => {
-      const actor = findActiveAdmin(state, principal);
-      if (actor === undefined) {
-        this.audit(state, "AUTHORIZATION_DENIED", "DENIED", null, null, now);
+      const actor = findActor(state, principal);
+      if (actor === undefined || !isEffectiveAdmin(actor)) {
+        this.audit(
+          state,
+          "AUTHORIZATION_DENIED",
+          "DENIED",
+          actor?.id ?? null,
+          null,
+          now
+        );
         return fail("FORBIDDEN");
       }
       return succeed(state.users.map(toPublicUser));
@@ -626,8 +653,8 @@ export class UserService {
     passwordHash: string
   ): Promise<PublicUser> {
     const ticketDigest = this.dependencies.digestSecret(plaintextTicket);
-    const now = this.now();
     const result = await this.store.update<Result<PublicUser>>((state) => {
+      const now = this.now();
       const ticket = state.tickets.find(
         (candidate) =>
           candidate.purpose === purpose &&
@@ -668,9 +695,9 @@ export class UserService {
     const now = this.now();
     const result = await this.store.update<Result<never>>((state) => {
       if (principal !== undefined) {
-        const actor = findActiveAdmin(state, principal);
-        if (actor === undefined) {
-          this.audit(state, event, "DENIED", null, null, now);
+        const actor = findActor(state, principal);
+        if (actor === undefined || !isEffectiveAdmin(actor)) {
+          this.audit(state, event, "DENIED", actor?.id ?? null, null, now);
           return fail("FORBIDDEN");
         }
         this.audit(state, event, "DENIED", actor.id, null, now);
@@ -695,9 +722,9 @@ export class UserService {
   ): Promise<PublicUser> {
     const now = this.now();
     const result = await this.store.update<Result<PublicUser>>((state) => {
-      const actor = findActiveAdmin(state, principal);
-      if (actor === undefined) {
-        this.audit(state, event, "DENIED", null, null, now);
+      const actor = findActor(state, principal);
+      if (actor === undefined || !isEffectiveAdmin(actor)) {
+        this.audit(state, event, "DENIED", actor?.id ?? null, null, now);
         return fail("FORBIDDEN");
       }
       const user = state.users.find(({ id }) => id === userId);
