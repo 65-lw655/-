@@ -220,7 +220,7 @@ git commit -m "feat: implement M2 authorization matrix"
 - Produces: `generateOpaqueSecret(): string` 和 `digestOpaqueSecret(secret): string`。
 - Consumes: Node.js `node:crypto`，不增加第三方加密依赖。
 
-- [ ] **Step 1: Write failing password tests with runtime-generated values**
+- [x] **Step 1: Write failing password tests with runtime-generated values**
 
 测试用密码通过以下函数运行时生成，不把密码字面量写入源码或快照：
 
@@ -232,13 +232,13 @@ function makeTestPassword(): string {
 
 覆盖：12 个 Unicode 码点下限、128 个码点上限、纯空白拒绝、相同密码产生不同哈希、正确密码通过、另一个随机密码拒绝、损坏格式返回 `false`。
 
-- [ ] **Step 2: Run password tests and verify RED**
+- [x] **Step 2: Run password tests and verify RED**
 
 Run: `npm run test -- --run apps/api/src/modules/auth/password.test.ts`
 
 Expected: FAIL，因为密码模块不存在。
 
-- [ ] **Step 3: Implement versioned scrypt hashing**
+- [x] **Step 3: Implement versioned scrypt hashing**
 
 使用异步 `scrypt`，参数固定为：
 
@@ -272,7 +272,7 @@ scrypt$v=1$N=131072,r=8,p=1$<base64url-salt>$<base64url-key>
 
 解析时校验算法、版本、参数、盐和派生结果长度；比较使用 `timingSafeEqual`。任何错误都返回 `false`，不得把输入或哈希写入错误消息。账号和会话服务依赖 `PasswordHasher` 接口；只有本文件的专门测试执行真实 scrypt，服务单元测试注入不记录输入的测试实现。
 
-- [ ] **Step 4: Write and run failing opaque-secret tests**
+- [x] **Step 4: Write and run failing opaque-secret tests**
 
 覆盖 100 次生成均为非空且唯一、摘要稳定、不同秘密摘要不同、摘要不包含原秘密。
 
@@ -280,7 +280,7 @@ Run: `npm run test -- --run apps/api/src/modules/auth/secrets.test.ts`
 
 Expected: FAIL，因为秘密模块不存在。
 
-- [ ] **Step 5: Implement opaque secrets and verify**
+- [x] **Step 5: Implement opaque secrets and verify**
 
 `generateOpaqueSecret` 使用 `randomBytes(32).toString("base64url")`；`digestOpaqueSecret` 使用 SHA-256 并输出 base64url。
 
@@ -293,7 +293,7 @@ npm run typecheck --workspace @project-online/api
 
 Expected: 密码和秘密测试全部通过，无敏感输入出现在输出中。
 
-- [ ] **Step 6: Commit security primitives**
+- [x] **Step 6: Commit security primitives**
 
 ```bash
 git add apps/api/src/modules/auth
