@@ -357,4 +357,26 @@ describe("authentication HTTP API", () => {
       }
     }
   );
+
+  it("rejects a null JSON body on authentication refresh", async () => {
+    const harness = await createHarness();
+    try {
+      const session = await bootstrapAndLogin(harness);
+      const response = await harness.app.inject({
+        method: "POST",
+        url: "/api/v1/auth/refresh",
+        headers: {
+          cookie: session.cookie,
+          origin: harness.config.webOrigin,
+          "content-type": "application/json"
+        },
+        payload: "null"
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().code).toBe("VALIDATION_ERROR");
+    } finally {
+      await harness.app.close();
+    }
+  });
 });

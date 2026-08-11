@@ -12,10 +12,15 @@ import type { AuthenticatedPrincipal } from "./user-service.js";
 const stringProperty = { type: "string" } as const;
 const emptyObjectSchema = {
   type: "object",
-  nullable: true,
   additionalProperties: false,
   properties: {}
 } as const;
+
+async function allowMissingBody(request: FastifyRequest): Promise<void> {
+  if (request.body === undefined) {
+    request.body = {};
+  }
+}
 const publicUserSchema = {
   type: "object",
   additionalProperties: false,
@@ -125,7 +130,8 @@ export function registerUserRoutes(
         params: idParamsSchema,
         body: emptyObjectSchema,
         response: { 200: issuedTicketSchema }
-      }
+      },
+      preValidation: allowMissingBody
     },
     async (request, reply) => {
       assertSameOrigin(request, config);
@@ -139,7 +145,10 @@ export function registerUserRoutes(
 
   app.post<{ Params: { id: string } }>(
     "/api/v1/users/:id/disable",
-    { schema: { params: idParamsSchema, body: emptyObjectSchema } },
+    {
+      preValidation: allowMissingBody,
+      schema: { params: idParamsSchema, body: emptyObjectSchema }
+    },
     async (request, reply) => {
       assertSameOrigin(request, config);
       await services.userService.disableUser(
@@ -152,7 +161,10 @@ export function registerUserRoutes(
 
   app.post<{ Params: { id: string } }>(
     "/api/v1/users/:id/enable",
-    { schema: { params: idParamsSchema, body: emptyObjectSchema } },
+    {
+      preValidation: allowMissingBody,
+      schema: { params: idParamsSchema, body: emptyObjectSchema }
+    },
     async (request, reply) => {
       assertSameOrigin(request, config);
       await services.userService.enableUser(
@@ -196,7 +208,8 @@ export function registerUserRoutes(
         params: idParamsSchema,
         body: emptyObjectSchema,
         response: { 200: issuedTicketSchema }
-      }
+      },
+      preValidation: allowMissingBody
     },
     async (request, reply) => {
       assertSameOrigin(request, config);
