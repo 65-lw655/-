@@ -273,6 +273,7 @@ select {
 }
 
 .admin-users {
+  min-width: 0;
   padding: 28px 32px 32px;
   background: #ffffff;
   border: 1px solid #dfe2e7;
@@ -669,7 +670,13 @@ select {
   }
 
   .account-card__details {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 20px;
+  }
+
+  .account-card__details > div:last-child dd {
+    white-space: nowrap;
   }
 
   .account-card__actions {
