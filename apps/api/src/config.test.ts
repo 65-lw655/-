@@ -7,7 +7,9 @@ describe("parseApiConfig", () => {
     expect(parseApiConfig({})).toEqual({
       host: "127.0.0.1",
       port: 3000,
-      environment: "development"
+      environment: "development",
+      webOrigin: "http://127.0.0.1:5173",
+      authStorePath: ".local-data/auth-store.json"
     });
   });
 
@@ -16,12 +18,16 @@ describe("parseApiConfig", () => {
       parseApiConfig({
         API_HOST: "0.0.0.0",
         API_PORT: "4100",
-        APP_ENV: "production"
+        APP_ENV: "production",
+        WEB_ORIGIN: "https://projects.example.com",
+        AUTH_STORE_PATH: "runtime/auth.json"
       })
     ).toEqual({
       host: "0.0.0.0",
       port: 4100,
-      environment: "production"
+      environment: "production",
+      webOrigin: "https://projects.example.com",
+      authStorePath: "runtime/auth.json"
     });
   });
 
@@ -42,5 +48,23 @@ describe("parseApiConfig", () => {
 
   it("uses the default host when API_HOST is blank", () => {
     expect(parseApiConfig({ API_HOST: "   " }).host).toBe("127.0.0.1");
+  });
+
+  it.each([
+    "ftp://projects.example.com",
+    "https://projects.example.com/path",
+    "https://projects.example.com?preview=1",
+    "https://projects.example.com#section",
+    "not-an-origin"
+  ])("rejects invalid WEB_ORIGIN value %j", (webOrigin) => {
+    expect(() => parseApiConfig({ WEB_ORIGIN: webOrigin })).toThrow(
+      "WEB_ORIGIN must be an HTTP(S) origin without path, query, or hash"
+    );
+  });
+
+  it("rejects an empty AUTH_STORE_PATH", () => {
+    expect(() => parseApiConfig({ AUTH_STORE_PATH: "   " })).toThrow(
+      "AUTH_STORE_PATH must not be empty"
+    );
   });
 });

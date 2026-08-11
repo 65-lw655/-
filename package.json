@@ -17,6 +17,7 @@
   ],
   "scripts": {
     "dev": "npm run build --workspace @project-online/domain && concurrently -n api,web -c cyan,green \"npm run dev --workspace @project-online/api\" \"npm run dev --workspace @project-online/web\"",
+    "bootstrap-admin": "npm run bootstrap-admin --workspace @project-online/api",
     "lint": "eslint . --max-warnings=0",
     "format:check": "prettier --check .",
     "typecheck": "npm run typecheck --workspaces --if-present",
