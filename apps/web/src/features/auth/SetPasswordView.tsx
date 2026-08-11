@@ -5,17 +5,16 @@ export type SetPasswordMode = "activate" | "reset";
 
 export interface SetPasswordViewProps {
   mode: SetPasswordMode;
-  ticket: string;
   onSubmit(ticket: string, password: string): Promise<void>;
   onSuccess(): void;
 }
 
 export function SetPasswordView({
   mode,
-  ticket,
   onSubmit,
   onSuccess
 }: SetPasswordViewProps) {
+  const [ticket, setTicket] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -42,6 +41,7 @@ export function SetPasswordView({
 
     try {
       await onSubmit(ticket, password);
+      setTicket("");
       setPassword("");
       setConfirmation("");
       onSuccess();
@@ -59,6 +59,17 @@ export function SetPasswordView({
         <p>请设置至少 12 个字符的新密码。</p>
       </div>
       <form className="auth-form" onSubmit={handleSubmit}>
+        <label>
+          <span>一次性码</span>
+          <input
+            autoComplete="one-time-code"
+            disabled={isSubmitting}
+            onChange={(event) => setTicket(event.target.value)}
+            required
+            type="password"
+            value={ticket}
+          />
+        </label>
         <label>
           <span>新密码</span>
           <span className="password-input">

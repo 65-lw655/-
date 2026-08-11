@@ -108,6 +108,72 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { name: "登录" })).toBeInTheDocument();
   });
 
+  it("switches anonymous entry modes", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(authenticationFailure());
+
+    render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
+
+    await screen.findByRole("heading", { name: "登录" });
+    fireEvent.click(screen.getByRole("button", { name: "使用激活码设置密码" }));
+    expect(screen.getByRole("heading", { name: "激活账户" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "使用重置码设置新密码" }));
+    expect(screen.getByRole("heading", { name: "重设密码" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "返回登录" }));
+    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["激活", "使用激活码设置密码", "激活账户", "/auth/activate"],
+    ["重置", "使用重置码设置新密码", "重设密码", "/auth/password-reset/complete"]
+  ] as const)(
+    "completes %s from the anonymous entry flow",
+    async (_, entryLabel, title, path) => {
+      const ticket = crypto.randomUUID();
+      const password = makePassword();
+      const fetchImpl = vi.fn<typeof fetch>();
+      fetchImpl.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith("/auth/session")) {
+          return authenticationFailure();
+        }
+        if (url.endsWith(path)) {
+          return noContentResponse();
+        }
+        return healthResponse();
+      });
+
+      render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
+
+      await screen.findByRole("heading", { name: "登录" });
+      fireEvent.click(screen.getByRole("button", { name: entryLabel }));
+      expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText("一次性码"), {
+        target: { value: ticket }
+      });
+      fireEvent.change(screen.getByLabelText("新密码"), {
+        target: { value: password }
+      });
+      fireEvent.change(screen.getByLabelText("确认新密码"), {
+        target: { value: password }
+      });
+      fireEvent.click(screen.getByRole("button", { name: "设置密码" }));
+
+      expect(await screen.findByRole("heading", { name: "登录" })).toBeInTheDocument();
+      expect(fetchImpl).toHaveBeenCalledWith(`/api/v1${path}`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({ ticket, password })
+      });
+    }
+  );
+
   it("shows the account after successful login and preserves runtime information", async () => {
     const fetchImpl = vi.fn<typeof fetch>();
     fetchImpl

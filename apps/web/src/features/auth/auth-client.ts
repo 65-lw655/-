@@ -49,6 +49,7 @@ export function createAuthClient(
     async getSession() {
       try {
         const response = await apiClient.request("/v1/auth/session", {
+          cache: "no-store",
           headers: { accept: "application/json" }
         });
         const payload: unknown = await response.json();

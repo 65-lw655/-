@@ -49,6 +49,7 @@ describe("createAuthClient", () => {
     await expect(client.getSession()).resolves.toMatchObject({ role: "LEADER" });
     expect(fetchImpl).toHaveBeenCalledWith("/api/v1/auth/session", {
       credentials: "same-origin",
+      cache: "no-store",
       headers: { accept: "application/json" }
     });
   });
@@ -242,11 +243,9 @@ describe("LoginView", () => {
 
 describe("SetPasswordView", () => {
   it("uses distinct activation and reset headings", () => {
-    const ticket = makeOpaqueValue();
     const { rerender } = render(
       <SetPasswordView
         mode="activate"
-        ticket={ticket}
         onSubmit={() => Promise.resolve()}
         onSuccess={vi.fn()}
       />
@@ -257,7 +256,6 @@ describe("SetPasswordView", () => {
     rerender(
       <SetPasswordView
         mode="reset"
-        ticket={ticket}
         onSubmit={() => Promise.resolve()}
         onSuccess={vi.fn()}
       />
@@ -270,12 +268,14 @@ describe("SetPasswordView", () => {
     render(
       <SetPasswordView
         mode="activate"
-        ticket={makeOpaqueValue()}
         onSubmit={vi.fn()}
         onSuccess={vi.fn()}
       />
     );
 
+    fireEvent.change(screen.getByLabelText("一次性码"), {
+      target: { value: makeOpaqueValue() }
+    });
     fireEvent.change(screen.getByLabelText("新密码"), {
       target: { value: crypto.randomUUID().slice(0, 11) }
     });
@@ -291,12 +291,14 @@ describe("SetPasswordView", () => {
     render(
       <SetPasswordView
         mode="reset"
-        ticket={makeOpaqueValue()}
         onSubmit={vi.fn()}
         onSuccess={vi.fn()}
       />
     );
 
+    fireEvent.change(screen.getByLabelText("一次性码"), {
+      target: { value: makeOpaqueValue() }
+    });
     fireEvent.change(screen.getByLabelText("新密码"), {
       target: { value: makePassword() }
     });
@@ -308,20 +310,23 @@ describe("SetPasswordView", () => {
     expect(screen.getByText("两次输入的密码不一致")).toBeInTheDocument();
   });
 
-  it("clears passwords after a successful submission", async () => {
+  it("clears the one-time code and passwords after a successful submission", async () => {
     const newPassword = makePassword();
+    const ticket = makeOpaqueValue();
     const onSuccess = vi.fn();
     const onSubmit = vi.fn(() => Promise.resolve());
 
     render(
       <SetPasswordView
         mode="activate"
-        ticket={makeOpaqueValue()}
         onSubmit={onSubmit}
         onSuccess={onSuccess}
       />
     );
 
+    fireEvent.change(screen.getByLabelText("一次性码"), {
+      target: { value: ticket }
+    });
     fireEvent.change(screen.getByLabelText("新密码"), {
       target: { value: newPassword }
     });
@@ -331,6 +336,7 @@ describe("SetPasswordView", () => {
     fireEvent.click(screen.getByRole("button", { name: "设置密码" }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
+    expect(screen.getByLabelText("一次性码")).toHaveValue("");
     expect(screen.getByLabelText("新密码")).toHaveValue("");
     expect(screen.getByLabelText("确认新密码")).toHaveValue("");
   });

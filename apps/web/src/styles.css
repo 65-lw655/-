@@ -132,6 +132,13 @@ select {
   margin: 34px auto;
 }
 
+.auth-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
 .auth-card,
 .account-card {
   padding: 32px;

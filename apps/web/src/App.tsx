@@ -13,6 +13,7 @@ import { resolveWebConfig } from "./config.js";
 import { AccountView } from "./features/auth/AccountView.js";
 import { createAuthClient, type SessionUser } from "./features/auth/auth-client.js";
 import { LoginView } from "./features/auth/LoginView.js";
+import { SetPasswordView } from "./features/auth/SetPasswordView.js";
 import { checkApiHealth } from "./health-client.js";
 
 type ApiStatus =
@@ -29,6 +30,8 @@ type SessionState =
   | { kind: "anonymous" }
   | { kind: "authenticated"; user: SessionUser }
   | { kind: "sessionExpired" };
+
+type AuthEntryMode = "login" | "activate" | "reset";
 
 interface ApiCheck {
   apiBaseUrl: string;
@@ -105,6 +108,7 @@ export function App({
     [config, fetchImpl]
   );
   const [session, setSession] = useState<SessionState>({ kind: "checking" });
+  const [authEntryMode, setAuthEntryMode] = useState<AuthEntryMode>("login");
   const [apiCheck, setApiCheck] = useState<ApiCheck>({
     apiBaseUrl: "",
     status: CHECKING_STATUS
@@ -205,6 +209,22 @@ export function App({
     }
   }
 
+  async function handleActivation(ticket: string, password: string): Promise<void> {
+    if (!authClient) {
+      throw new Error("Authentication API is unavailable");
+    }
+
+    await authClient.activate(ticket, password);
+  }
+
+  async function handleReset(ticket: string, password: string): Promise<void> {
+    if (!authClient) {
+      throw new Error("Authentication API is unavailable");
+    }
+
+    await authClient.completeReset(ticket, password);
+  }
+
   const status: ApiStatus = config.ok
     ? apiCheck.apiBaseUrl === config.apiBaseUrl
       ? apiCheck.status
@@ -252,7 +272,47 @@ export function App({
               <p className="form-error" role="alert">会话已失效，请重新登录</p>
             ) : null}
             {!config.ok ? <p className="form-error" role="alert">{config.message}</p> : null}
-            <LoginView onLogin={handleLogin} onSuccess={() => undefined} />
+            <div className="auth-entry-actions">
+              {authEntryMode !== "login" ? (
+                <button
+                  className="secondary-button"
+                  onClick={() => setAuthEntryMode("login")}
+                  type="button"
+                >
+                  返回登录
+                </button>
+              ) : null}
+              {authEntryMode !== "activate" ? (
+                <button
+                  className="secondary-button"
+                  onClick={() => setAuthEntryMode("activate")}
+                  type="button"
+                >
+                  使用激活码设置密码
+                </button>
+              ) : null}
+              {authEntryMode !== "reset" ? (
+                <button
+                  className="secondary-button"
+                  onClick={() => setAuthEntryMode("reset")}
+                  type="button"
+                >
+                  使用重置码设置新密码
+                </button>
+              ) : null}
+            </div>
+            {authEntryMode === "login" ? (
+              <LoginView onLogin={handleLogin} onSuccess={() => undefined} />
+            ) : (
+              <SetPasswordView
+                key={authEntryMode}
+                mode={authEntryMode}
+                onSubmit={
+                  authEntryMode === "activate" ? handleActivation : handleReset
+                }
+                onSuccess={() => setAuthEntryMode("login")}
+              />
+            )}
           </div>
         ) : null}
         {authenticated ? (
