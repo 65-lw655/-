@@ -8,7 +8,8 @@ import {
   fireEvent,
   render,
   screen,
-  waitFor
+  waitFor,
+  within
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -52,6 +53,19 @@ function authenticationFailure(): Response {
 
 function noContentResponse(): Response {
   return new Response(null, { status: 204 });
+}
+
+function managedUser() {
+  return {
+    id: crypto.randomUUID(),
+    username: `admin-view-${crypto.randomUUID()}`,
+    displayName: "管理员视图用户",
+    role: "USER",
+    accountStatus: "ACTIVE",
+    credentialStatus: "READY",
+    createdAt: "2026-08-11T08:00:00.000Z",
+    updatedAt: "2026-08-11T08:00:00.000Z"
+  };
 }
 
 function makePassword(): string {
@@ -238,19 +252,29 @@ describe("App", () => {
     expect(screen.queryByText("USER")).not.toBeInTheDocument();
   });
 
-  it("shows the user-management entry only to administrators", async () => {
+  it("renders user management with a valid user list for administrators", async () => {
+    const user = managedUser();
     const fetchImpl = vi.fn<typeof fetch>();
     fetchImpl.mockImplementation(async (input) => {
-      return String(input).endsWith("/auth/session")
-        ? sessionResponse("ADMIN")
-        : healthResponse();
+      const url = String(input);
+      if (url.endsWith("/auth/session")) {
+        return sessionResponse("ADMIN");
+      }
+      if (url.endsWith("/v1/users")) {
+        return new Response(JSON.stringify([user]), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return healthResponse();
     });
 
     render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
 
-    expect(
-      await screen.findByRole("link", { name: "用户管理" })
-    ).toBeInTheDocument();
+    const adminUsersView = await screen.findByRole("region", { name: "用户管理" });
+    expect(screen.getByRole("link", { name: "用户管理" })).toBeInTheDocument();
+    expect(within(adminUsersView).getByRole("table")).toBeInTheDocument();
+    expect(await within(adminUsersView).findByText(user.username)).toBeInTheDocument();
   });
 
   it.each(["USER", "LEADER"] as const)(
@@ -267,6 +291,7 @@ describe("App", () => {
 
       await screen.findByRole("heading", { name: "账户" });
       expect(screen.queryByRole("link", { name: "用户管理" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "用户管理" })).not.toBeInTheDocument();
     }
   );
 

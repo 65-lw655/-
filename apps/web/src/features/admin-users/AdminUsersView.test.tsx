@@ -90,6 +90,11 @@ describe("AdminUsersView", () => {
   it("creates a passwordless account and clears its activation code when closed", async () => {
     const activationCode = crypto.randomUUID();
     const issuedUser = createUser({ credentialStatus: "PENDING_ACTIVATION" });
+    const refreshedUser = {
+      ...issuedUser,
+      displayName: "已开通用户"
+    };
+    let listRequestCount = 0;
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith("/v1/users") && init?.method === "POST") {
@@ -99,7 +104,8 @@ describe("AdminUsersView", () => {
           expiresAt: "2026-08-12T08:00:00.000Z"
         }, 201);
       }
-      return jsonResponse([issuedUser]);
+      listRequestCount += 1;
+      return jsonResponse(listRequestCount === 1 ? [] : [refreshedUser]);
     });
 
     renderView(fetchImpl);
@@ -121,6 +127,13 @@ describe("AdminUsersView", () => {
 
     expect(await screen.findByText("激活码仅显示一次")).toBeInTheDocument();
     expect(screen.getByText(activationCode)).toBeInTheDocument();
+    await waitFor(() => {
+      const listRequests = fetchImpl.mock.calls.filter(([input, init]) =>
+        String(input) === `${API_BASE_URL}/v1/users` && init?.method === undefined
+      );
+      expect(listRequests).toHaveLength(2);
+      expect(screen.getByText(refreshedUser.displayName)).toBeInTheDocument();
+    });
     fireEvent.click(screen.getByRole("button", { name: "关闭" }));
     expect(screen.queryByText(activationCode)).not.toBeInTheDocument();
 
