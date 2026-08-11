@@ -564,13 +564,13 @@ git commit -m "feat: add login sessions and authorization services"
 - Produces: 设计第 11 节全部 HTTP 路由和 `bootstrap-admin` 命令。
 - Consumes: Tasks 2-5 的服务。
 
-- [ ] **Step 1: Install the Fastify cookie plugin**
+- [x] **Step 1: Install the Fastify cookie plugin**
 
 Run: `npm install @fastify/cookie --workspace @project-online/api`
 
 Expected: 根 lockfile 更新，安装版本与 Fastify 5 兼容，`npm audit` 不新增已知漏洞。
 
-- [ ] **Step 2: Write failing configuration tests**
+- [x] **Step 2: Write failing configuration tests**
 
 扩展 `ApiConfig`：
 
@@ -586,13 +586,13 @@ interface ApiConfig {
 
 默认 `WEB_ORIGIN=http://127.0.0.1:5173`、`AUTH_STORE_PATH=.local-data/auth-store.json`。拒绝非 HTTP(S) origin、带 path/query/hash 的 origin 和空状态路径。
 
-- [ ] **Step 3: Run config tests, implement parser, and verify GREEN**
+- [x] **Step 3: Run config tests, implement parser, and verify GREEN**
 
 Run: `npm run test -- --run apps/api/src/config.test.ts`
 
 Expected: 首次因缺少字段失败；实现后全部通过。`.env.example` 只增加上述公开非敏感配置名和值。
 
-- [ ] **Step 4: Write failing authentication HTTP tests**
+- [x] **Step 4: Write failing authentication HTTP tests**
 
 使用 `app.inject` 和内存服务覆盖：激活、登录 Cookie、当前会话、刷新 Cookie 轮换、退出清 Cookie、修改密码、完成重置、错误码、额外请求字段拒绝和不匹配 Origin 返回 403。
 
@@ -608,23 +608,23 @@ expect(setCookie).toContain("Path=/");
 
 开发环境断言 Cookie 名为 `id` 且不含 `Secure`。
 
-- [ ] **Step 5: Run auth HTTP tests and verify RED**
+- [x] **Step 5: Run auth HTTP tests and verify RED**
 
 Run: `npm run test -- --run apps/api/src/modules/auth/http.test.ts`
 
 Expected: FAIL，因为路由尚未注册。
 
-- [ ] **Step 6: Implement auth routes and request hooks**
+- [x] **Step 6: Implement auth routes and request hooks**
 
 注册 `@fastify/cookie`。认证路由按设计第 11.1、11.2 节实现；Cookie 状态变更请求校验 `Origin === config.webOrigin`。受保护路由从 Cookie 调用 `authenticate`，不接受请求体中的 user ID 或角色。
 
 为登录、激活、刷新、重置和修改密码响应设置 `Cache-Control: no-store`。Fastify Schema 全部 `additionalProperties: false`。
 
-- [ ] **Step 7: Write failing user-management HTTP tests**
+- [x] **Step 7: Write failing user-management HTTP tests**
 
 覆盖：管理员列表和开通成功、非管理员 403、无会话 401、停用、启用、角色变化、重新签发激活码、签发重置码、最后管理员保护，以及所有响应字段不包含 `passwordHash`、`tokenHash`、`ticketDigest`。
 
-- [ ] **Step 8: Implement user routes and verify API**
+- [x] **Step 8: Implement user routes and verify API**
 
 Run:
 
@@ -635,7 +635,7 @@ npm run typecheck --workspace @project-online/api
 
 Expected: 健康检查保持兼容，认证和用户 API 测试全部通过。
 
-- [ ] **Step 9: Write failing bootstrap tests**
+- [x] **Step 9: Write failing bootstrap tests**
 
 将交互与逻辑分开：
 
@@ -654,7 +654,7 @@ export async function runBootstrapAdmin(
 
 测试使用运行时随机密码和捕获输出，断言两次输入不一致拒绝、已有用户拒绝、成功输出不包含密码或哈希。
 
-- [ ] **Step 10: Implement cross-platform terminal bootstrap**
+- [x] **Step 10: Implement cross-platform terminal bootstrap**
 
 先在 `terminal-password.test.ts` 使用可控输入输出流验证：字符不回显、Backspace 删除一个字符、Ctrl+C 拒绝、正常完成和异常退出都恢复 raw mode。运行测试并确认因模块不存在而失败。
 
@@ -669,7 +669,7 @@ export async function runBootstrapAdmin(
 }
 ```
 
-- [ ] **Step 11: Compose runtime services and verify**
+- [x] **Step 11: Compose runtime services and verify**
 
 `runtime.ts` 只负责打开 `FileAuthStateStore`、创建一次 dummy 密码哈希并装配 Task 2-5 服务。`APP_ENV=production` 时必须在打开文件前拒绝启动，错误固定为“Production authentication store is not configured”。`server.ts` 在监听前完成装配；启动错误只输出安全消息，不序列化环境变量或状态内容。
 
@@ -684,7 +684,7 @@ npm audit
 
 Expected: API 测试、类型检查和双入口构建通过，审计为 0 个已知漏洞。
 
-- [ ] **Step 12: Commit API and bootstrap flow**
+- [x] **Step 12: Commit API and bootstrap flow**
 
 ```bash
 git add .env.example package.json package-lock.json apps/api
