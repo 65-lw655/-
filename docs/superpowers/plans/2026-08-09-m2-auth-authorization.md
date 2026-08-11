@@ -849,11 +849,11 @@ npm run dev
 
 Windows 使用 `Copy-Item .env.example .env`。明确 `.local-data/auth-store.json` 是被忽略的单机开发数据，不得用于生产或提交；说明所有用户通过激活码自行设置密码。
 
-- [ ] **Step 3: Update TO-do only after evidence exists**
+- [x] **Step 3: Update TO-do only after evidence exists**
 
 只勾选通过自动化和浏览器验收的 M2.1、M2.2、M2.3 条目。未实现数据库、多实例、桌面凭证和项目业务保持未完成。
 
-- [ ] **Step 4: Run clean installation and full verification**
+- [x] **Step 4: Run clean installation and full verification**
 
 Run:
 
@@ -881,20 +881,20 @@ git status --short
 
 Expected: 本地状态被忽略；仓储测试已经证明文件不含测试运行时生成的密码、会话令牌和一次性码。不得用终端命令打印本地状态文件内容。
 
-- [ ] **Step 6: Perform browser acceptance**
+- [x] **Step 6: Perform browser acceptance**
 
 流程固定为：初始化临时管理员并登录 → 开通普通用户 → 普通用户使用激活码自行设置密码 → 普通用户登录 → 普通用户访问管理员用户接口得到 403 → 管理员停用普通用户 → 普通用户旧会话变为 401。
 
 在 1440×900 和 390×844 视口验证无横向溢出、文字重叠或未处理控制台错误。一次性码在关闭对话框后不可恢复。浏览器联调不得展示或记录实际密码、Cookie 或完整一次性码。
 
-- [ ] **Step 7: Commit M2 documentation and completion record**
+- [x] **Step 7: Commit M2 documentation and completion record**
 
 ```bash
 git add README.md TO-do.md docs/architecture docs/superpowers/plans/2026-08-09-m2-auth-authorization.md
 git commit -m "docs: complete M2 authentication workflow"
 ```
 
-- [ ] **Step 8: Final branch check**
+- [x] **Step 8: Final branch check**
 
 Run:
 
