@@ -149,17 +149,20 @@ describe("AdminUsersView", () => {
     };
     const activationCode = crypto.randomUUID();
     let listRequestCount = 0;
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       const url = String(input);
-      if (url.endsWith(`/${pendingUser.id}/activation`)) {
+      if (url.endsWith(`/${pendingUser.id}/activation`) && init?.method === "POST") {
         return jsonResponse({
           user: pendingUser,
           ticket: activationCode,
           expiresAt: "2026-08-12T08:00:00.000Z"
         });
       }
-      listRequestCount += 1;
-      return jsonResponse(listRequestCount === 1 ? [pendingUser] : [refreshedUser]);
+      if (url === `${API_BASE_URL}/v1/users` && init?.method === undefined) {
+        listRequestCount += 1;
+        return jsonResponse(listRequestCount === 1 ? [pendingUser] : [refreshedUser]);
+      }
+      return apiError("UNEXPECTED_REQUEST", "Unexpected request", 405);
     });
 
     renderView(fetchImpl);
@@ -175,6 +178,7 @@ describe("AdminUsersView", () => {
         `${API_BASE_URL}/v1/users/${pendingUser.id}/activation`,
         `${API_BASE_URL}/v1/users`
       ]);
+      expect(fetchImpl.mock.calls[1]?.[1]).toMatchObject({ method: "POST" });
       expect(screen.getByText(refreshedUser.updatedAt)).toBeInTheDocument();
     });
   });
@@ -185,20 +189,26 @@ describe("AdminUsersView", () => {
     const disabledActiveUser = { ...activeUser, accountStatus: "DISABLED" as const };
     const enabledUser = { ...disabledUser, accountStatus: "ACTIVE" as const };
     let listRequestCount = 0;
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       const url = String(input);
-      if (url.endsWith(`/${activeUser.id}/disable`) || url.endsWith(`/${disabledUser.id}/enable`)) {
+      if (
+        (url.endsWith(`/${activeUser.id}/disable`) || url.endsWith(`/${disabledUser.id}/enable`)) &&
+        init?.method === "POST"
+      ) {
         return noContent();
       }
-      listRequestCount += 1;
-      if (listRequestCount === 1) {
-        return jsonResponse([activeUser, disabledUser]);
+      if (url === `${API_BASE_URL}/v1/users` && init?.method === undefined) {
+        listRequestCount += 1;
+        if (listRequestCount === 1) {
+          return jsonResponse([activeUser, disabledUser]);
+        }
+        return jsonResponse(
+          listRequestCount === 2
+            ? [disabledActiveUser, disabledUser]
+            : [disabledActiveUser, enabledUser]
+        );
       }
-      return jsonResponse(
-        listRequestCount === 2
-          ? [disabledActiveUser, disabledUser]
-          : [disabledActiveUser, enabledUser]
-      );
+      return apiError("UNEXPECTED_REQUEST", "Unexpected request", 405);
     });
 
     renderView(fetchImpl);
@@ -218,6 +228,7 @@ describe("AdminUsersView", () => {
         `${API_BASE_URL}/v1/users/${activeUser.id}/disable`,
         `${API_BASE_URL}/v1/users`
       ]);
+      expect(fetchImpl.mock.calls[1]?.[1]).toMatchObject({ method: "POST" });
       const row = screen.getByRole("row", { name: new RegExp(activeUser.username) });
       expect(within(row).getByText("停用")).toBeInTheDocument();
     });
@@ -233,6 +244,7 @@ describe("AdminUsersView", () => {
         `${API_BASE_URL}/v1/users/${disabledUser.id}/enable`,
         `${API_BASE_URL}/v1/users`
       ]);
+      expect(fetchImpl.mock.calls[3]?.[1]).toMatchObject({ method: "POST" });
       const row = screen.getByRole("row", { name: new RegExp(disabledUser.username) });
       expect(within(row).getByText("启用")).toBeInTheDocument();
     });
@@ -247,8 +259,11 @@ describe("AdminUsersView", () => {
       if (url.endsWith(`/${user.id}/role`) && init?.method === "PATCH") {
         return jsonResponse({ ...user, role: "LEADER" });
       }
-      listRequestCount += 1;
-      return jsonResponse(listRequestCount === 1 ? [user] : [refreshedUser]);
+      if (url === `${API_BASE_URL}/v1/users` && init?.method === undefined) {
+        listRequestCount += 1;
+        return jsonResponse(listRequestCount === 1 ? [user] : [refreshedUser]);
+      }
+      return apiError("UNEXPECTED_REQUEST", "Unexpected request", 405);
     });
 
     renderView(fetchImpl);
@@ -266,6 +281,10 @@ describe("AdminUsersView", () => {
         `${API_BASE_URL}/v1/users/${user.id}/role`,
         `${API_BASE_URL}/v1/users`
       ]);
+      expect(fetchImpl.mock.calls[1]?.[1]).toMatchObject({
+        method: "PATCH",
+        body: JSON.stringify({ role: "LEADER" })
+      });
       const row = screen.getByRole("row", { name: new RegExp(user.username) });
       expect(within(row).getByText("负责人")).toBeInTheDocument();
     });
@@ -279,17 +298,20 @@ describe("AdminUsersView", () => {
     };
     const resetCode = crypto.randomUUID();
     let listRequestCount = 0;
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       const url = String(input);
-      if (url.endsWith(`/${user.id}/password-reset`)) {
+      if (url.endsWith(`/${user.id}/password-reset`) && init?.method === "POST") {
         return jsonResponse({
           user: { ...user, credentialStatus: "RESET_REQUIRED" },
           ticket: resetCode,
           expiresAt: "2026-08-11T08:30:00.000Z"
         });
       }
-      listRequestCount += 1;
-      return jsonResponse(listRequestCount === 1 ? [user] : [refreshedUser]);
+      if (url === `${API_BASE_URL}/v1/users` && init?.method === undefined) {
+        listRequestCount += 1;
+        return jsonResponse(listRequestCount === 1 ? [user] : [refreshedUser]);
+      }
+      return apiError("UNEXPECTED_REQUEST", "Unexpected request", 405);
     });
 
     renderView(fetchImpl);
@@ -307,6 +329,7 @@ describe("AdminUsersView", () => {
         `${API_BASE_URL}/v1/users/${user.id}/password-reset`,
         `${API_BASE_URL}/v1/users`
       ]);
+      expect(fetchImpl.mock.calls[1]?.[1]).toMatchObject({ method: "POST" });
       const row = screen.getByRole("row", { name: new RegExp(user.username) });
       expect(within(row).getByText("待重置")).toBeInTheDocument();
     });
