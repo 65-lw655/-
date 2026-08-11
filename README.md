@@ -2,7 +2,7 @@
 
 面向企业内部项目经营管理的线上系统。系统同时提供浏览器、macOS 桌面端和 Windows 桌面端，支持多人按权限访问项目，并允许桌面端在断网时继续编辑、恢复网络后自动同步。
 
-> 当前状态：M1 工程基线开发阶段。共享版本、API 健康检查和 Web 连通状态已经建立；账号、业务数据、离线同步和桌面原生能力尚未实现。
+> 当前状态：M2 的自动化身份认证、授权和 Web 用户管理已实现；浏览器验收尚待完成。项目业务、生产存储、多实例支持和桌面凭证仍未实现。
 
 ## 一、建设目标
 
@@ -28,7 +28,7 @@ Windows 首期不接入 Windows 日历或 Microsoft To Do。
 
 ### 用户与权限
 
-- 账号由系统管理员创建、启用、停用和重置密码。
+- 账号由系统管理员创建、启用、停用和签发重置一次性码；用户自行设置密码。
 - 普通用户只能查看和编辑自己被授权参与的项目。
 - 领导可以查看全部项目资料，默认不直接获得全部项目的编辑权限。
 - 管理员可以管理账号、角色、项目授权和系统配置，并全局新增、修改和逻辑删除全部项目业务数据。
@@ -281,6 +281,8 @@ macOS 或 Linux：
 ```bash
 cp .env.example .env
 npm ci
+npm run bootstrap-admin --workspace @project-online/api
+npm run dev
 ```
 
 Windows PowerShell：
@@ -288,11 +290,15 @@ Windows PowerShell：
 ```powershell
 Copy-Item .env.example .env
 npm ci
+npm run bootstrap-admin --workspace @project-online/api
+npm run dev
 ```
 
-`.env` 仅用于本机公开开发配置，已经加入 `.gitignore`。不得在其中提交密码、令牌、密钥或真实生产地址。
+`.env` 仅用于本机公开开发配置，已经加入 `.gitignore`。不得在其中提交密码、令牌、密钥或真实生产地址。`AUTH_STORE_PATH` 默认的 `.local-data/auth-store.json` 是被忽略的单机开发数据，不得提交或用于生产。
 
-### 启动
+首次运行时，`bootstrap-admin` 会在本机终端创建首位管理员并由该管理员自行输入密码。管理员开通其他用户或发起密码重置时，只能签发一次性码；所有由管理员开通的用户通过激活码自行设置密码，管理员不能代设或查看密码。
+
+### 开发服务
 
 ```bash
 npm run dev

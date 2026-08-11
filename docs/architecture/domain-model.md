@@ -89,13 +89,43 @@ erDiagram
 | `username` | 唯一登录名，规范化后比较 |
 | `displayName` | 显示姓名 |
 | `role` | `USER`、`LEADER`、`ADMIN` |
-| `status` | `ACTIVE`、`DISABLED` |
+| `accountStatus` | 账号状态：`ACTIVE`、`DISABLED`，决定账号是否可以访问系统 |
+| `credentialStatus` | 凭证状态：`PENDING_ACTIVATION`、`READY`、`RESET_REQUIRED`，决定密码是否可用于登录 |
 | `passwordHash` | 密码安全哈希，仅服务端可访问 |
 | `passwordChangedAt` | 密码最后变更时间 |
 
-账号不得保存明文密码。用户停用不删除历史审计关系。
+账号状态与凭证状态必须独立判定：只有 `ACTIVE/READY` 的组合可以登录和使用受保护接口。账号不得保存明文密码。用户停用不删除历史审计关系。
 
-### 5.2 `Device`
+### 5.2 `CredentialTicket`
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 一次性凭证记录 ID |
+| `userId` | 所属用户 ID |
+| `purpose` | `ACTIVATION` 或 `PASSWORD_RESET` |
+| `ticketDigest` | 一次性码摘要，不保存原值 |
+| `issuedAt` | 签发时间 |
+| `expiresAt` | 失效时间 |
+| `usedAt` | 使用时间；空值表示尚未使用 |
+| `revokedAt` | 作废时间；重新签发或账号状态变化时填写 |
+
+一次性码只在签发时返回给管理员用于安全转交；用户自行使用后设置密码，管理员不能设置、读取或导出用户密码。
+
+### 5.3 `Session`
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 会话 ID |
+| `userId` | 当前认证用户 ID |
+| `tokenDigest` | 会话令牌摘要，不保存原值 |
+| `issuedAt` | 创建时间 |
+| `expiresAt` | 失效时间 |
+| `revokedAt` | 撤销时间；账号停用、密码重置或退出时填写 |
+| `deviceName` | 用户提供的设备显示名称摘要 |
+
+会话认证时读取用户当前账号和凭证状态，不能只信任会话创建时的状态或角色快照。
+
+### 5.4 `Device`
 
 | 字段 | 说明 |
 | --- | --- |

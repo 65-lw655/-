@@ -832,11 +832,11 @@ git commit -m "feat: add administrator user management"
 - Produces: 可执行的管理员初始化与 M2 开发说明、已验证待办状态。
 - Consumes: Tasks 1-8 的真实命令、状态、路径和 API 行为。
 
-- [ ] **Step 1: Update architecture documents**
+- [x] **Step 1: Update architecture documents**
 
 在领域模型中把 `User` 的账号状态和凭证状态分开，增加一次性凭证和会话摘要字段；权限矩阵增加“账号启用且凭证就绪”的前置条件和管理员不能设置用户密码的规则。不得添加数据库表名或 SQL。
 
-- [ ] **Step 2: Update README with exact local workflow**
+- [x] **Step 2: Update README with exact local workflow**
 
 增加以下顺序：
 
@@ -870,7 +870,7 @@ git diff --check
 
 Expected: 全部命令退出 0，测试 0 failures，npm audit 为 0 个已知漏洞。
 
-- [ ] **Step 5: Run sensitive-data and storage-boundary checks**
+- [x] **Step 5: Run sensitive-data and storage-boundary checks**
 
 使用运行时生成的临时状态完成测试后，确认：
 
