@@ -333,4 +333,28 @@ describe("authentication HTTP API", () => {
       await harness.app.close();
     }
   });
+
+  it.each(["/api/v1/auth/refresh", "/api/v1/auth/logout"])(
+    "rejects an unexpected JSON body on %s",
+    async (url) => {
+      const harness = await createHarness();
+      try {
+        const session = await bootstrapAndLogin(harness);
+        const response = await harness.app.inject({
+          method: "POST",
+          url,
+          headers: {
+            cookie: session.cookie,
+            origin: harness.config.webOrigin
+          },
+          payload: { unexpected: true }
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().code).toBe("VALIDATION_ERROR");
+      } finally {
+        await harness.app.close();
+      }
+    }
+  );
 });

@@ -309,4 +309,104 @@ describe("administrator user HTTP API", () => {
       await harness.app.close();
     }
   });
+
+  it("rejects an unexpected JSON body when reissuing activation", async () => {
+    const harness = await createHarness();
+    try {
+      const admin = await createAdmin(harness);
+      const pending = await harness.userService.createUser(
+        { userId: admin.user.id, sessionId: randomUUID(), role: "ADMIN" },
+        {
+          username: `pending-${randomUUID()}`,
+          displayName: "Pending user",
+          role: "USER"
+        }
+      );
+
+      const response = await harness.app.inject({
+        method: "POST",
+        url: `/api/v1/users/${pending.user.id}/activation`,
+        headers: {
+          cookie: admin.cookie,
+          origin: harness.config.webOrigin
+        },
+        payload: { unexpected: true }
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().code).toBe("VALIDATION_ERROR");
+    } finally {
+      await harness.app.close();
+    }
+  });
+
+  it("rejects an unexpected JSON body when disabling a user", async () => {
+    const harness = await createHarness();
+    try {
+      const admin = await createAdmin(harness);
+      const regular = await createReadyUser(harness, admin.user.id);
+      const response = await harness.app.inject({
+        method: "POST",
+        url: `/api/v1/users/${regular.user.id}/disable`,
+        headers: {
+          cookie: admin.cookie,
+          origin: harness.config.webOrigin
+        },
+        payload: { unexpected: true }
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().code).toBe("VALIDATION_ERROR");
+    } finally {
+      await harness.app.close();
+    }
+  });
+
+  it("rejects an unexpected JSON body when enabling a user", async () => {
+    const harness = await createHarness();
+    try {
+      const admin = await createAdmin(harness);
+      const regular = await createReadyUser(harness, admin.user.id);
+      await harness.userService.disableUser(
+        { userId: admin.user.id, sessionId: randomUUID(), role: "ADMIN" },
+        regular.user.id
+      );
+      const response = await harness.app.inject({
+        method: "POST",
+        url: `/api/v1/users/${regular.user.id}/enable`,
+        headers: {
+          cookie: admin.cookie,
+          origin: harness.config.webOrigin
+        },
+        payload: { unexpected: true }
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().code).toBe("VALIDATION_ERROR");
+    } finally {
+      await harness.app.close();
+    }
+  });
+
+  it("rejects an unexpected JSON body when issuing a password reset", async () => {
+    const harness = await createHarness();
+    try {
+      const admin = await createAdmin(harness);
+      const regular = await createReadyUser(harness, admin.user.id);
+      const response = await harness.app.inject({
+        method: "POST",
+        url: `/api/v1/users/${regular.user.id}/password-reset`,
+        headers: {
+          cookie: admin.cookie,
+          origin: harness.config.webOrigin
+        },
+        payload: { unexpected: true }
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().code).toBe("VALIDATION_ERROR");
+    } finally {
+      await harness.app.close();
+    }
+  });
 });

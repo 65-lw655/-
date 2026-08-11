@@ -25,6 +25,12 @@ export class ApiError extends Error {
 }
 
 const stringProperty = { type: "string" } as const;
+const emptyObjectSchema = {
+  type: "object",
+  nullable: true,
+  additionalProperties: false,
+  properties: {}
+} as const;
 
 function cookieName(config: ApiConfig): "__Host-id" | "id" {
   return config.environment === "production" ? "__Host-id" : "id";
@@ -142,7 +148,7 @@ export function registerAuthRoutes(
 
   app.post(
     "/api/v1/auth/refresh",
-    {},
+    { schema: { body: emptyObjectSchema } },
     async (request, reply) => {
       assertSameOrigin(request, config);
       const session = await services.authService.refresh(
@@ -186,7 +192,7 @@ export function registerAuthRoutes(
 
   app.post(
     "/api/v1/auth/logout",
-    {},
+    { schema: { body: emptyObjectSchema } },
     async (request, reply) => {
       assertSameOrigin(request, config);
       await services.authService.logout(readSessionToken(request, config));
