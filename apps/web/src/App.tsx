@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ApiClientError } from "./api-client.js";
 import { resolveWebConfig } from "./config.js";
 import { AccountView } from "./features/auth/AccountView.js";
+import { AdminUsersView } from "./features/admin-users/AdminUsersView.js";
 import { createAuthClient, type SessionUser } from "./features/auth/auth-client.js";
 import { LoginView } from "./features/auth/LoginView.js";
 import { SetPasswordView } from "./features/auth/SetPasswordView.js";
@@ -318,6 +319,9 @@ export function App({
         {authenticated ? (
           <section className="authenticated-content">
             <AccountView user={session.user} onLogout={() => void handleLogout()} />
+            {session.user.role === "ADMIN" && config.ok ? (
+              <AdminUsersView apiBaseUrl={config.apiBaseUrl} fetchImpl={fetchImpl} />
+            ) : null}
             <ApiStatusPanel status={status} />
           </section>
         ) : null}
