@@ -138,7 +138,7 @@ erDiagram
 
 macOS 日历 ID、提醒事项 ID 及本机原生对象 ID 只保存在对应设备本地，不进入中央业务数据。
 
-### 5.3 `ProjectMember`
+### 5.5 `ProjectMember`
 
 | 字段 | 说明 |
 | --- | --- |
