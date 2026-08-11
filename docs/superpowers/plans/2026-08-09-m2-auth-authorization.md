@@ -710,7 +710,7 @@ git commit -m "feat: expose M2 authentication and user APIs"
 - Produces: `AuthClient`、`SessionUser` 和登录/激活/重置/账号视图。
 - Consumes: Task 6 的认证 API；不读取 Cookie 内容。
 
-- [ ] **Step 1: Write failing auth-client tests**
+- [x] **Step 1: Write failing auth-client tests**
 
 覆盖请求路径、JSON body、统一错误解析、204 空响应和 `credentials: "same-origin"`。客户端公开：
 
@@ -726,29 +726,29 @@ export interface AuthClient {
 }
 ```
 
-- [ ] **Step 2: Run client tests, implement, and verify GREEN**
+- [x] **Step 2: Run client tests, implement, and verify GREEN**
 
 Run: `npm run test -- --run apps/web/src/features/auth/auth.test.tsx`
 
 Expected: 首次因模块缺失失败；实现客户端后客户端测试通过。
 
-- [ ] **Step 3: Write failing login and self-set-password view tests**
+- [x] **Step 3: Write failing login and self-set-password view tests**
 
 覆盖：登录字段、提交中禁用、通用失败、成功回调、激活和重置模式标题、12 字符规则、两次密码不一致、提交后输入清空。测试密码运行时生成。
 
-- [ ] **Step 4: Implement compact authentication views**
+- [x] **Step 4: Implement compact authentication views**
 
 登录首屏直接呈现产品名和登录表单，不增加营销 Hero。激活和重置使用同一个 `SetPasswordView` 的显式 mode。密码使用标准 password input，提供 lucide 眼睛图标切换可见性并带 tooltip/aria-label。
 
-- [ ] **Step 5: Write failing App session-state tests**
+- [x] **Step 5: Write failing App session-state tests**
 
 覆盖：启动检查会话、未登录显示登录、登录成功显示账号、401 回到登录、退出后清空身份、`ADMIN` 显示用户管理入口、`USER/LEADER` 不显示该入口。
 
-- [ ] **Step 6: Implement the App state machine and responsive shell**
+- [x] **Step 6: Implement the App state machine and responsive shell**
 
 状态固定为 `checking | anonymous | authenticated | sessionExpired`。身份只保存在 React 内存；不得调用 `localStorage` 或 `sessionStorage`。保留 M1 系统版本和 API 状态为已登录工具栏中的紧凑信息。
 
-- [ ] **Step 7: Verify and commit Web authentication**
+- [x] **Step 7: Verify and commit Web authentication**
 
 Run:
 
