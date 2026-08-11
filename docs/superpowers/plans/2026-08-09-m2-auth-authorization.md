@@ -480,19 +480,19 @@ git commit -m "feat: add self-service credential lifecycle"
 - Produces: `AuthorizationService.authorize(principal, projectContext, action)`。
 - Consumes: Tasks 1-4；构造时注入 `PasswordHasher` 和启动阶段生成的 dummy 密码哈希。
 
-- [ ] **Step 1: Write failing authentication tests**
+- [x] **Step 1: Write failing authentication tests**
 
 覆盖：正确登录创建摘要会话、错误密码统一 `INVALID_CREDENTIALS`、不存在账号调用 `PasswordHasher.verify` 校验 dummy 哈希后返回同一错误、停用和凭证未就绪返回同一错误、5 次失败后第 6 次返回 `LOGIN_RATE_LIMITED`、成功登录清除失败桶。
 
 测试通过注入时钟推进时间，不使用真实等待；来源地址先 SHA-256 摘要后进入失败桶和审计。
 
-- [ ] **Step 2: Run login tests and verify RED**
+- [x] **Step 2: Run login tests and verify RED**
 
 Run: `npm run test -- --run apps/api/src/modules/auth/auth-service.test.ts`
 
 Expected: FAIL，因为 `AuthService` 不存在。
 
-- [ ] **Step 3: Implement login and current-session authentication**
+- [x] **Step 3: Implement login and current-session authentication**
 
 公开签名固定为：
 
@@ -509,11 +509,11 @@ authenticate(token: string): Promise<AuthenticatedPrincipal>;
 
 会话令牌有效期 30 分钟。`authenticate` 每次按令牌摘要读取会话和当前用户，拒绝过期、撤销、停用或凭证未就绪状态，返回当前角色而非会话创建时角色。
 
-- [ ] **Step 4: Add failing refresh, logout, and password-change tests**
+- [x] **Step 4: Add failing refresh, logout, and password-change tests**
 
 覆盖：有效刷新轮换令牌、旧令牌重复刷新拒绝、过期刷新拒绝、退出撤销当前会话、修改密码验证旧密码、修改成功撤销其他会话并轮换当前会话、管理员停用或调整角色后旧令牌拒绝。
 
-- [ ] **Step 5: Implement session commands and verify**
+- [x] **Step 5: Implement session commands and verify**
 
 `refresh`、`logout` 和 `changePassword` 各自在一次状态事务内完成摘要替换或撤销。明文新令牌只通过返回值传给 HTTP 层。
 
@@ -521,7 +521,7 @@ Run: `npm run test -- --run apps/api/src/modules/auth/auth-service.test.ts`
 
 Expected: 登录、限制、轮换、退出和修改密码测试全部通过。
 
-- [ ] **Step 6: Write and implement authorization-service tests**
+- [x] **Step 6: Write and implement authorization-service tests**
 
 测试服务从当前 principal 和项目成员输入构建 `AuthorizationContext`，调用 Task 1 的 `authorizeAction`。至少覆盖：管理员角色撤销后无成员同步写入拒绝、领导非成员写入拒绝、普通成员读取允许、账号停用优先拒绝。
 
@@ -529,7 +529,7 @@ Run: `npm run test -- --run apps/api/src/modules/authorization/authorization-ser
 
 Expected: 首次运行因模块缺失失败；实现最小服务后通过。
 
-- [ ] **Step 7: Commit authentication services**
+- [x] **Step 7: Commit authentication services**
 
 ```bash
 git add apps/api/src/modules/auth apps/api/src/modules/authorization
