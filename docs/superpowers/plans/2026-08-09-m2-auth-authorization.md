@@ -780,27 +780,27 @@ git commit -m "feat: add Web login and session experience"
 - Produces: 管理员用户列表、开通、启停、角色调整、重新激活和密码重置界面。
 - Consumes: Task 6 用户 API、Task 7 会话身份。
 
-- [ ] **Step 1: Write failing administrator interaction tests**
+- [x] **Step 1: Write failing administrator interaction tests**
 
 覆盖：加载用户列表、开通表单没有密码字段、开通后只显示一次激活码、关闭后不能恢复、待激活用户可重新签发、启停确认、角色菜单、签发重置码只显示一次、403 显示无权限、最后管理员错误显示明确提示。
 
-- [ ] **Step 2: Run admin UI tests and verify RED**
+- [x] **Step 2: Run admin UI tests and verify RED**
 
 Run: `npm run test -- --run apps/web/src/features/admin-users/AdminUsersView.test.tsx`
 
 Expected: FAIL，因为管理员模块不存在。
 
-- [ ] **Step 3: Implement the API client and user table**
+- [x] **Step 3: Implement the API client and user table**
 
 表格列固定为显示名称、登录名、角色、账号状态、凭证状态、更新时间和操作菜单。窄屏使用可横向滚动的表格容器，不把每行转换成嵌套卡片。
 
 开通账号对话框只含登录名、显示名称和角色。二次确认用于停用、角色变化和密码重置。所有命令成功后重新读取列表。
 
-- [ ] **Step 4: Implement one-time credential display**
+- [x] **Step 4: Implement one-time credential display**
 
 激活码或重置码仅保存在当前对话框组件状态；关闭对话框时设置为空。提供复制图标按钮和明确的“一次显示”状态，不把值写入 URL、日志、浏览器存储或错误对象。
 
-- [ ] **Step 5: Verify and commit administrator UI**
+- [x] **Step 5: Verify and commit administrator UI**
 
 Run:
 
