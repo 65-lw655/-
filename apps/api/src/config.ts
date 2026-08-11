@@ -35,7 +35,8 @@ export function parseApiConfig(
   try {
     const parsedOrigin = new URL(webOrigin);
     if (
-      (parsedOrigin.protocol !== "http:" && parsedOrigin.protocol !== "https:") ||
+      (parsedOrigin.protocol !== "http:" &&
+        parsedOrigin.protocol !== "https:") ||
       parsedOrigin.origin !== webOrigin
     ) {
       throw new Error();

@@ -61,7 +61,9 @@ function noContent(): Response {
 }
 
 function renderView(fetchImpl: typeof fetch) {
-  return render(<AdminUsersView apiBaseUrl={API_BASE_URL} fetchImpl={fetchImpl} />);
+  return render(
+    <AdminUsersView apiBaseUrl={API_BASE_URL} fetchImpl={fetchImpl} />
+  );
 }
 
 function openActions(user: User): HTMLElement {
@@ -73,18 +75,34 @@ function openActions(user: User): HTMLElement {
 describe("AdminUsersView", () => {
   it("loads the fixed-column user table", async () => {
     const user = createUser();
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse([user]));
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse([user]));
 
     renderView(fetchImpl);
 
     expect(await screen.findByText(user.displayName)).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "显示名称" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "登录名" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "角色" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "账号状态" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "凭证状态" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "更新时间" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "操作" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "显示名称" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "登录名" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "角色" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "账号状态" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "凭证状态" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "更新时间" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "操作" })
+    ).toBeInTheDocument();
   });
 
   it("creates a passwordless account and clears its activation code when closed", async () => {
@@ -95,18 +113,23 @@ describe("AdminUsersView", () => {
       displayName: "已开通用户"
     };
     let listRequestCount = 0;
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
-      const url = String(input);
-      if (url.endsWith("/v1/users") && init?.method === "POST") {
-        return jsonResponse({
-          user: issuedUser,
-          ticket: activationCode,
-          expiresAt: "2026-08-12T08:00:00.000Z"
-        }, 201);
-      }
-      listRequestCount += 1;
-      return jsonResponse(listRequestCount === 1 ? [] : [refreshedUser]);
-    });
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/v1/users") && init?.method === "POST") {
+          return jsonResponse(
+            {
+              user: issuedUser,
+              ticket: activationCode,
+              expiresAt: "2026-08-12T08:00:00.000Z"
+            },
+            201
+          );
+        }
+        listRequestCount += 1;
+        return jsonResponse(listRequestCount === 1 ? [] : [refreshedUser]);
+      });
 
     renderView(fetchImpl);
     await screen.findByRole("button", { name: "开通账号" });
@@ -128,8 +151,10 @@ describe("AdminUsersView", () => {
     expect(await screen.findByText("激活码仅显示一次")).toBeInTheDocument();
     expect(screen.getByText(activationCode)).toBeInTheDocument();
     await waitFor(() => {
-      const listRequests = fetchImpl.mock.calls.filter(([input, init]) =>
-        String(input) === `${API_BASE_URL}/v1/users` && init?.method === undefined
+      const listRequests = fetchImpl.mock.calls.filter(
+        ([input, init]) =>
+          String(input) === `${API_BASE_URL}/v1/users` &&
+          init?.method === undefined
       );
       expect(listRequests).toHaveLength(2);
       expect(screen.getByText(refreshedUser.displayName)).toBeInTheDocument();
@@ -149,21 +174,28 @@ describe("AdminUsersView", () => {
     };
     const activationCode = crypto.randomUUID();
     let listRequestCount = 0;
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
-      const url = String(input);
-      if (url.endsWith(`/${pendingUser.id}/activation`) && init?.method === "POST") {
-        return jsonResponse({
-          user: pendingUser,
-          ticket: activationCode,
-          expiresAt: "2026-08-12T08:00:00.000Z"
-        });
-      }
-      if (url === `${API_BASE_URL}/v1/users` && init?.method === undefined) {
-        listRequestCount += 1;
-        return jsonResponse(listRequestCount === 1 ? [pendingUser] : [refreshedUser]);
-      }
-      return apiError("UNEXPECTED_REQUEST", "Unexpected request", 405);
-    });
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          url.endsWith(`/${pendingUser.id}/activation`) &&
+          init?.method === "POST"
+        ) {
+          return jsonResponse({
+            user: pendingUser,
+            ticket: activationCode,
+            expiresAt: "2026-08-12T08:00:00.000Z"
+          });
+        }
+        if (url === `${API_BASE_URL}/v1/users` && init?.method === undefined) {
+          listRequestCount += 1;
+          return jsonResponse(
+            listRequestCount === 1 ? [pendingUser] : [refreshedUser]
+          );
+        }
+        return apiError("UNEXPECTED_REQUEST", "Unexpected request", 405);
+      });
 
     renderView(fetchImpl);
     await screen.findByText(pendingUser.displayName);
@@ -186,37 +218,45 @@ describe("AdminUsersView", () => {
   it("requires confirmation before disabling and enabling accounts", async () => {
     const activeUser = createUser();
     const disabledUser = createUser({ accountStatus: "DISABLED" });
-    const disabledActiveUser = { ...activeUser, accountStatus: "DISABLED" as const };
+    const disabledActiveUser = {
+      ...activeUser,
+      accountStatus: "DISABLED" as const
+    };
     const enabledUser = { ...disabledUser, accountStatus: "ACTIVE" as const };
     let listRequestCount = 0;
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
-      const url = String(input);
-      if (
-        (url.endsWith(`/${activeUser.id}/disable`) || url.endsWith(`/${disabledUser.id}/enable`)) &&
-        init?.method === "POST"
-      ) {
-        return noContent();
-      }
-      if (url === `${API_BASE_URL}/v1/users` && init?.method === undefined) {
-        listRequestCount += 1;
-        if (listRequestCount === 1) {
-          return jsonResponse([activeUser, disabledUser]);
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          (url.endsWith(`/${activeUser.id}/disable`) ||
+            url.endsWith(`/${disabledUser.id}/enable`)) &&
+          init?.method === "POST"
+        ) {
+          return noContent();
         }
-        return jsonResponse(
-          listRequestCount === 2
-            ? [disabledActiveUser, disabledUser]
-            : [disabledActiveUser, enabledUser]
-        );
-      }
-      return apiError("UNEXPECTED_REQUEST", "Unexpected request", 405);
-    });
+        if (url === `${API_BASE_URL}/v1/users` && init?.method === undefined) {
+          listRequestCount += 1;
+          if (listRequestCount === 1) {
+            return jsonResponse([activeUser, disabledUser]);
+          }
+          return jsonResponse(
+            listRequestCount === 2
+              ? [disabledActiveUser, disabledUser]
+              : [disabledActiveUser, enabledUser]
+          );
+        }
+        return apiError("UNEXPECTED_REQUEST", "Unexpected request", 405);
+      });
 
     renderView(fetchImpl);
     await screen.findByText(activeUser.username);
 
     openActions(activeUser);
     fireEvent.click(screen.getByRole("menuitem", { name: "停用" }));
-    expect(screen.getByRole("dialog", { name: "确认停用账号" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "确认停用账号" })
+    ).toBeInTheDocument();
     expect(fetchImpl).not.toHaveBeenCalledWith(
       `${API_BASE_URL}/v1/users/${activeUser.id}/disable`,
       expect.anything()
@@ -229,7 +269,9 @@ describe("AdminUsersView", () => {
         `${API_BASE_URL}/v1/users`
       ]);
       expect(fetchImpl.mock.calls[1]?.[1]).toMatchObject({ method: "POST" });
-      const row = screen.getByRole("row", { name: new RegExp(activeUser.username) });
+      const row = screen.getByRole("row", {
+        name: new RegExp(activeUser.username)
+      });
       expect(within(row).getByText("停用")).toBeInTheDocument();
     });
 
@@ -245,7 +287,9 @@ describe("AdminUsersView", () => {
         `${API_BASE_URL}/v1/users`
       ]);
       expect(fetchImpl.mock.calls[3]?.[1]).toMatchObject({ method: "POST" });
-      const row = screen.getByRole("row", { name: new RegExp(disabledUser.username) });
+      const row = screen.getByRole("row", {
+        name: new RegExp(disabledUser.username)
+      });
       expect(within(row).getByText("启用")).toBeInTheDocument();
     });
   });
@@ -254,25 +298,33 @@ describe("AdminUsersView", () => {
     const user = createUser();
     const refreshedUser = { ...user, role: "LEADER" as const };
     let listRequestCount = 0;
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
-      const url = String(input);
-      if (url.endsWith(`/${user.id}/role`) && init?.method === "PATCH") {
-        return jsonResponse({ ...user, role: "LEADER" });
-      }
-      if (url === `${API_BASE_URL}/v1/users` && init?.method === undefined) {
-        listRequestCount += 1;
-        return jsonResponse(listRequestCount === 1 ? [user] : [refreshedUser]);
-      }
-      return apiError("UNEXPECTED_REQUEST", "Unexpected request", 405);
-    });
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith(`/${user.id}/role`) && init?.method === "PATCH") {
+          return jsonResponse({ ...user, role: "LEADER" });
+        }
+        if (url === `${API_BASE_URL}/v1/users` && init?.method === undefined) {
+          listRequestCount += 1;
+          return jsonResponse(
+            listRequestCount === 1 ? [user] : [refreshedUser]
+          );
+        }
+        return apiError("UNEXPECTED_REQUEST", "Unexpected request", 405);
+      });
 
     renderView(fetchImpl);
     await screen.findByText(user.displayName);
     openActions(user);
     fireEvent.click(screen.getByRole("menuitem", { name: "调整角色" }));
-    fireEvent.change(screen.getByLabelText("新角色"), { target: { value: "LEADER" } });
+    fireEvent.change(screen.getByLabelText("新角色"), {
+      target: { value: "LEADER" }
+    });
     fireEvent.click(screen.getByRole("button", { name: "继续" }));
-    expect(screen.getByRole("dialog", { name: "确认调整角色" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "确认调整角色" })
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "确认调整" }));
 
     await waitFor(() => {
@@ -298,27 +350,36 @@ describe("AdminUsersView", () => {
     };
     const resetCode = crypto.randomUUID();
     let listRequestCount = 0;
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
-      const url = String(input);
-      if (url.endsWith(`/${user.id}/password-reset`) && init?.method === "POST") {
-        return jsonResponse({
-          user: { ...user, credentialStatus: "RESET_REQUIRED" },
-          ticket: resetCode,
-          expiresAt: "2026-08-11T08:30:00.000Z"
-        });
-      }
-      if (url === `${API_BASE_URL}/v1/users` && init?.method === undefined) {
-        listRequestCount += 1;
-        return jsonResponse(listRequestCount === 1 ? [user] : [refreshedUser]);
-      }
-      return apiError("UNEXPECTED_REQUEST", "Unexpected request", 405);
-    });
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          url.endsWith(`/${user.id}/password-reset`) &&
+          init?.method === "POST"
+        ) {
+          return jsonResponse({
+            user: { ...user, credentialStatus: "RESET_REQUIRED" },
+            ticket: resetCode,
+            expiresAt: "2026-08-11T08:30:00.000Z"
+          });
+        }
+        if (url === `${API_BASE_URL}/v1/users` && init?.method === undefined) {
+          listRequestCount += 1;
+          return jsonResponse(
+            listRequestCount === 1 ? [user] : [refreshedUser]
+          );
+        }
+        return apiError("UNEXPECTED_REQUEST", "Unexpected request", 405);
+      });
 
     renderView(fetchImpl);
     await screen.findByText(user.displayName);
     openActions(user);
     fireEvent.click(screen.getByRole("menuitem", { name: "重置密码" }));
-    expect(screen.getByRole("dialog", { name: "确认重置密码" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "确认重置密码" })
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "确认重置" }));
 
     expect(await screen.findByText("重置码仅显示一次")).toBeInTheDocument();
@@ -340,26 +401,32 @@ describe("AdminUsersView", () => {
   it("shows a no-permission message for a 403 response", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(apiError("FORBIDDEN", "Operation is not allowed", 403));
+      .mockResolvedValue(
+        apiError("FORBIDDEN", "Operation is not allowed", 403)
+      );
 
     renderView(fetchImpl);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("您没有管理用户的权限");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "您没有管理用户的权限"
+    );
   });
 
   it("explains that the last active administrator must remain available", async () => {
     const administrator = createUser({ role: "ADMIN" });
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input) => {
-      const url = String(input);
-      if (url.endsWith(`/${administrator.id}/disable`)) {
-        return apiError(
-          "LAST_ADMIN_REQUIRED",
-          "At least one active administrator is required",
-          409
-        );
-      }
-      return jsonResponse([administrator]);
-    });
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith(`/${administrator.id}/disable`)) {
+          return apiError(
+            "LAST_ADMIN_REQUIRED",
+            "At least one active administrator is required",
+            409
+          );
+        }
+        return jsonResponse([administrator]);
+      });
 
     renderView(fetchImpl);
     await screen.findByText(administrator.displayName);

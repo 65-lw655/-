@@ -12,7 +12,10 @@ import { ApiClientError } from "./api-client.js";
 import { resolveWebConfig } from "./config.js";
 import { AccountView } from "./features/auth/AccountView.js";
 import { AdminUsersView } from "./features/admin-users/AdminUsersView.js";
-import { createAuthClient, type SessionUser } from "./features/auth/auth-client.js";
+import {
+  createAuthClient,
+  type SessionUser
+} from "./features/auth/auth-client.js";
 import { LoginView } from "./features/auth/LoginView.js";
 import { SetPasswordView } from "./features/auth/SetPasswordView.js";
 import { checkApiHealth } from "./health-client.js";
@@ -116,8 +119,7 @@ export function App({
   });
 
   useEffect(() => {
-    if (!authClient) {
-      setSession({ kind: "anonymous" });
+    if (authClient === null) {
       return;
     }
 
@@ -127,7 +129,9 @@ export function App({
       .getSession()
       .then((user) => {
         if (active) {
-          setSession(user ? { kind: "authenticated", user } : { kind: "anonymous" });
+          setSession(
+            user ? { kind: "authenticated", user } : { kind: "anonymous" }
+          );
         }
       })
       .catch(() => {
@@ -147,7 +151,6 @@ export function App({
     }
 
     let active = true;
-    setApiCheck({ apiBaseUrl: config.apiBaseUrl, status: CHECKING_STATUS });
 
     void checkApiHealth(config.apiBaseUrl, fetchImpl).then((result) => {
       if (!active) {
@@ -182,7 +185,10 @@ export function App({
     };
   }, [config, fetchImpl, session.kind]);
 
-  async function handleLogin(username: string, password: string): Promise<void> {
+  async function handleLogin(
+    username: string,
+    password: string
+  ): Promise<void> {
     if (!authClient) {
       throw new Error("Authentication API is unavailable");
     }
@@ -210,7 +216,10 @@ export function App({
     }
   }
 
-  async function handleActivation(ticket: string, password: string): Promise<void> {
+  async function handleActivation(
+    ticket: string,
+    password: string
+  ): Promise<void> {
     if (!authClient) {
       throw new Error("Authentication API is unavailable");
     }
@@ -232,7 +241,9 @@ export function App({
       : CHECKING_STATUS
     : { kind: "error", title: "配置缺失", message: config.message };
 
-  const authenticated = session.kind === "authenticated";
+  const currentSession: SessionState =
+    authClient === null ? { kind: "anonymous" } : session;
+  const authenticated = currentSession.kind === "authenticated";
 
   return (
     <div className="app-shell">
@@ -264,15 +275,24 @@ export function App({
       </header>
 
       <main className="main-content">
-        {session.kind === "checking" ? (
-          <p className="session-message" role="status">正在恢复会话</p>
+        {currentSession.kind === "checking" ? (
+          <p className="session-message" role="status">
+            正在恢复会话
+          </p>
         ) : null}
-        {session.kind === "anonymous" || session.kind === "sessionExpired" ? (
+        {currentSession.kind === "anonymous" ||
+        currentSession.kind === "sessionExpired" ? (
           <div className="auth-layout">
-            {session.kind === "sessionExpired" ? (
-              <p className="form-error" role="alert">会话已失效，请重新登录</p>
+            {currentSession.kind === "sessionExpired" ? (
+              <p className="form-error" role="alert">
+                会话已失效，请重新登录
+              </p>
             ) : null}
-            {!config.ok ? <p className="form-error" role="alert">{config.message}</p> : null}
+            {!config.ok ? (
+              <p className="form-error" role="alert">
+                {config.message}
+              </p>
+            ) : null}
             <div className="auth-entry-actions">
               {authEntryMode !== "login" ? (
                 <button
@@ -318,9 +338,15 @@ export function App({
         ) : null}
         {authenticated ? (
           <section className="authenticated-content">
-            <AccountView user={session.user} onLogout={() => void handleLogout()} />
-            {session.user.role === "ADMIN" && config.ok ? (
-              <AdminUsersView apiBaseUrl={config.apiBaseUrl} fetchImpl={fetchImpl} />
+            <AccountView
+              user={currentSession.user}
+              onLogout={() => void handleLogout()}
+            />
+            {currentSession.user.role === "ADMIN" && config.ok ? (
+              <AdminUsersView
+                apiBaseUrl={config.apiBaseUrl}
+                fetchImpl={fetchImpl}
+              />
             ) : null}
             <ApiStatusPanel status={status} />
           </section>

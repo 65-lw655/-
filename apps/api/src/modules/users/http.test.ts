@@ -205,7 +205,10 @@ describe("administrator user HTTP API", () => {
         payload: { role: "LEADER" }
       });
       expect(role.statusCode).toBe(200);
-      expect(role.json()).toMatchObject({ id: regular.user.id, role: "LEADER" });
+      expect(role.json()).toMatchObject({
+        id: regular.user.id,
+        role: "LEADER"
+      });
       expectNoStoredCredentialFields(role.json());
     } finally {
       await harness.app.close();

@@ -33,7 +33,10 @@ const ACCOUNT_STATUS_LABELS: Record<ManagedUser["accountStatus"], string> = {
   DISABLED: "停用"
 };
 
-const CREDENTIAL_STATUS_LABELS: Record<ManagedUser["credentialStatus"], string> = {
+const CREDENTIAL_STATUS_LABELS: Record<
+  ManagedUser["credentialStatus"],
+  string
+> = {
   PENDING_ACTIVATION: "待激活",
   READY: "已就绪",
   RESET_REQUIRED: "待重置"
@@ -52,7 +55,10 @@ function errorMessage(error: unknown): string {
   return error.message;
 }
 
-function confirmationCopy(confirmation: Confirmation): { title: string; button: string } {
+function confirmationCopy(confirmation: Confirmation): {
+  title: string;
+  button: string;
+} {
   switch (confirmation.kind) {
     case "disable":
       return { title: "确认停用账号", button: "确认停用" };
@@ -93,8 +99,30 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
   }, [client]);
 
   useEffect(() => {
-    void loadUsers();
-  }, [loadUsers]);
+    let active = true;
+
+    void client
+      .listUsers()
+      .then((loadedUsers) => {
+        if (active) {
+          setUsers(loadedUsers);
+        }
+      })
+      .catch((loadError) => {
+        if (active) {
+          setError(errorMessage(loadError));
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [client]);
 
   async function showIssuedCredential(
     issue: () => Promise<{ ticket: string }>,
@@ -110,7 +138,9 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
     }
   }
 
-  async function submitCreate(event: React.FormEvent<HTMLFormElement>): Promise<void> {
+  async function submitCreate(
+    event: React.FormEvent<HTMLFormElement>
+  ): Promise<void> {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const username = String(formData.get("username") ?? "");
@@ -148,7 +178,10 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
       } else if (currentConfirmation.kind === "enable") {
         await client.enableUser(currentConfirmation.user.id);
       } else if (currentConfirmation.kind === "role") {
-        await client.changeRole(currentConfirmation.user.id, currentConfirmation.role);
+        await client.changeRole(
+          currentConfirmation.user.id,
+          currentConfirmation.role
+        );
       }
       await loadUsers();
     } catch (commandError) {
@@ -168,22 +201,40 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
     }
   }
 
-  const confirmationDetails = confirmation ? confirmationCopy(confirmation) : null;
+  const confirmationDetails = confirmation
+    ? confirmationCopy(confirmation)
+    : null;
 
   return (
-    <section className="admin-users" id="user-management" aria-labelledby="admin-users-title">
+    <section
+      className="admin-users"
+      id="user-management"
+      aria-labelledby="admin-users-title"
+    >
       <div className="admin-users__heading">
         <div>
           <h2 id="admin-users-title">用户管理</h2>
           <p>开通、维护和恢复系统用户。</p>
         </div>
-        <button className="primary-button" onClick={() => setCreateOpen(true)} type="button">
+        <button
+          className="primary-button"
+          onClick={() => setCreateOpen(true)}
+          type="button"
+        >
           开通账号
         </button>
       </div>
 
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
-      {loading ? <p className="session-message" role="status">正在加载用户</p> : null}
+      {error ? (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {loading ? (
+        <p className="session-message" role="status">
+          正在加载用户
+        </p>
+      ) : null}
 
       <div className="admin-users__table-container">
         <table className="admin-users__table">
@@ -211,7 +262,9 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
                   <button
                     aria-expanded={openMenuId === user.id}
                     className="secondary-button"
-                    onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
+                    onClick={() =>
+                      setOpenMenuId(openMenuId === user.id ? null : user.id)
+                    }
                     type="button"
                   >
                     操作
@@ -233,14 +286,21 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
                           重新签发激活码
                         </button>
                       ) : null}
-                      <button onClick={() => openRoleDialog(user)} role="menuitem" type="button">
+                      <button
+                        onClick={() => openRoleDialog(user)}
+                        role="menuitem"
+                        type="button"
+                      >
                         调整角色
                       </button>
                       <button
                         onClick={() => {
                           setOpenMenuId(null);
                           setConfirmation({
-                            kind: user.accountStatus === "ACTIVE" ? "disable" : "enable",
+                            kind:
+                              user.accountStatus === "ACTIVE"
+                                ? "disable"
+                                : "enable",
                             user
                           });
                         }}
@@ -270,7 +330,11 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
 
       {createOpen ? (
         <div className="modal-backdrop">
-          <form aria-labelledby="create-user-title" className="admin-dialog" onSubmit={submitCreate}>
+          <form
+            aria-labelledby="create-user-title"
+            className="admin-dialog"
+            onSubmit={submitCreate}
+          >
             <h3 id="create-user-title">开通账号</h3>
             <label>
               登录名
@@ -284,13 +348,23 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
               角色
               <select defaultValue="USER" name="role">
                 {Object.entries(ROLE_LABELS).map(([role, label]) => (
-                  <option key={role} value={role}>{label}</option>
+                  <option key={role} value={role}>
+                    {label}
+                  </option>
                 ))}
               </select>
             </label>
             <div className="admin-dialog__actions">
-              <button className="secondary-button" onClick={() => setCreateOpen(false)} type="button">取消</button>
-              <button className="primary-button" type="submit">确认开通</button>
+              <button
+                className="secondary-button"
+                onClick={() => setCreateOpen(false)}
+                type="button"
+              >
+                取消
+              </button>
+              <button className="primary-button" type="submit">
+                确认开通
+              </button>
             </div>
           </form>
         </div>
@@ -298,22 +372,43 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
 
       {roleUser ? (
         <div className="modal-backdrop">
-          <div aria-labelledby="change-role-title" className="admin-dialog" role="dialog">
+          <div
+            aria-labelledby="change-role-title"
+            className="admin-dialog"
+            role="dialog"
+          >
             <h3 id="change-role-title">调整角色</h3>
             <label>
               新角色
-              <select onChange={(event) => setSelectedRole(event.target.value as UserRole)} value={selectedRole}>
+              <select
+                onChange={(event) =>
+                  setSelectedRole(event.target.value as UserRole)
+                }
+                value={selectedRole}
+              >
                 {Object.entries(ROLE_LABELS).map(([role, label]) => (
-                  <option key={role} value={role}>{label}</option>
+                  <option key={role} value={role}>
+                    {label}
+                  </option>
                 ))}
               </select>
             </label>
             <div className="admin-dialog__actions">
-              <button className="secondary-button" onClick={() => setRoleUser(null)} type="button">取消</button>
+              <button
+                className="secondary-button"
+                onClick={() => setRoleUser(null)}
+                type="button"
+              >
+                取消
+              </button>
               <button
                 className="primary-button"
                 onClick={() => {
-                  setConfirmation({ kind: "role", user: roleUser, role: selectedRole });
+                  setConfirmation({
+                    kind: "role",
+                    user: roleUser,
+                    role: selectedRole
+                  });
                   setRoleUser(null);
                 }}
                 type="button"
@@ -327,12 +422,26 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
 
       {confirmation && confirmationDetails ? (
         <div className="modal-backdrop">
-          <div aria-labelledby="confirmation-title" className="admin-dialog" role="dialog">
+          <div
+            aria-labelledby="confirmation-title"
+            className="admin-dialog"
+            role="dialog"
+          >
             <h3 id="confirmation-title">{confirmationDetails.title}</h3>
             <p>此操作将作用于“{confirmation.user.displayName}”。</p>
             <div className="admin-dialog__actions">
-              <button className="secondary-button" onClick={() => setConfirmation(null)} type="button">取消</button>
-              <button className="primary-button" onClick={() => void submitConfirmation()} type="button">
+              <button
+                className="secondary-button"
+                onClick={() => setConfirmation(null)}
+                type="button"
+              >
+                取消
+              </button>
+              <button
+                className="primary-button"
+                onClick={() => void submitConfirmation()}
+                type="button"
+              >
                 {confirmationDetails.button}
               </button>
             </div>
@@ -342,17 +451,32 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
 
       {credential ? (
         <div className="modal-backdrop">
-          <div aria-labelledby="credential-title" className="admin-dialog" role="dialog">
+          <div
+            aria-labelledby="credential-title"
+            className="admin-dialog"
+            role="dialog"
+          >
             <h3 id="credential-title">{credential.title}</h3>
             <p>请立即安全传递给用户，关闭后无法恢复。</p>
             <div className="credential-display">
               <code>{credential.ticket}</code>
-              <button aria-label="复制" className="secondary-button" onClick={() => void copyCredential()} type="button">
+              <button
+                aria-label="复制"
+                className="secondary-button"
+                onClick={() => void copyCredential()}
+                type="button"
+              >
                 <Copy aria-hidden="true" />
               </button>
             </div>
             <div className="admin-dialog__actions">
-              <button className="primary-button" onClick={() => setCredential(null)} type="button">关闭</button>
+              <button
+                className="primary-button"
+                onClick={() => setCredential(null)}
+                type="button"
+              >
+                关闭
+              </button>
             </div>
           </div>
         </div>

@@ -89,7 +89,11 @@ export function SetPasswordView({
               title={passwordVisible ? "隐藏密码" : "显示密码"}
               type="button"
             >
-              {passwordVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+              {passwordVisible ? (
+                <EyeOff aria-hidden="true" />
+              ) : (
+                <Eye aria-hidden="true" />
+              )}
             </button>
           </span>
         </label>
@@ -104,8 +108,16 @@ export function SetPasswordView({
             value={confirmation}
           />
         </label>
-        {error ? <p className="form-error" role="alert">{error}</p> : null}
-        <button className="primary-button" disabled={isSubmitting} type="submit">
+        {error ? (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <button
+          className="primary-button"
+          disabled={isSubmitting}
+          type="submit"
+        >
           {isSubmitting ? "设置中" : "设置密码"}
         </button>
       </form>

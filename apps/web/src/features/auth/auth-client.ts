@@ -37,7 +37,10 @@ export function createAuthClient(
 ): AuthClient {
   const apiClient = createApiClient(apiBaseUrl, fetchImpl);
 
-  async function post(path: string, body: Record<string, string> = {}): Promise<void> {
+  async function post(
+    path: string,
+    body: Record<string, string> = {}
+  ): Promise<void> {
     await apiClient.request(path, {
       method: "POST",
       headers: JSON_HEADERS,
@@ -54,7 +57,11 @@ export function createAuthClient(
         });
         const payload: unknown = await response.json();
         if (!isSessionUser(payload)) {
-          throw new ApiClientError(response.status, "INVALID_RESPONSE", "API 响应无效");
+          throw new ApiClientError(
+            response.status,
+            "INVALID_RESPONSE",
+            "API 响应无效"
+          );
         }
         return payload;
       } catch (error) {

@@ -116,10 +116,7 @@ export function registerUserRoutes(
         await authenticate(request, config, services),
         request.body
       );
-      reply
-        .header("Cache-Control", "no-store")
-        .code(201)
-        .send(issued);
+      reply.header("Cache-Control", "no-store").code(201).send(issued);
     }
   );
 

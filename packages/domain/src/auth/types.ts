@@ -1,9 +1,7 @@
 export type SystemRole = "USER" | "LEADER" | "ADMIN";
 export type AccountStatus = "ACTIVE" | "DISABLED";
 export type CredentialStatus =
-  | "PENDING_ACTIVATION"
-  | "READY"
-  | "RESET_REQUIRED";
+  "PENDING_ACTIVATION" | "READY" | "RESET_REQUIRED";
 export type ProjectMemberRole = "OWNER" | "EDITOR" | "VIEWER";
 
 export type AuthorizationAction =

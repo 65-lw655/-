@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { authorizeAction } from "./authorization.js";
-import type {
-  AuthorizationContext,
-  ProjectMemberRole
-} from "./types.js";
+import type { AuthorizationContext, ProjectMemberRole } from "./types.js";
 
 const user = (memberRole: ProjectMemberRole | null): AuthorizationContext => ({
   accountStatus: "ACTIVE",
@@ -15,7 +12,9 @@ const user = (memberRole: ProjectMemberRole | null): AuthorizationContext => ({
   memberRole
 });
 
-const leader = (memberRole: ProjectMemberRole | null): AuthorizationContext => ({
+const leader = (
+  memberRole: ProjectMemberRole | null
+): AuthorizationContext => ({
   ...user(memberRole),
   systemRole: "LEADER"
 });

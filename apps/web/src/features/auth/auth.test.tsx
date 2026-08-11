@@ -41,12 +41,16 @@ function makeOpaqueValue(): string {
 
 describe("createAuthClient", () => {
   it("uses same-origin credentials for session recovery and returns the session user", async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
-      jsonResponse({ userId: crypto.randomUUID(), role: "LEADER" })
-    );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ userId: crypto.randomUUID(), role: "LEADER" })
+      );
     const client = createAuthClient("/api", fetchImpl);
 
-    await expect(client.getSession()).resolves.toMatchObject({ role: "LEADER" });
+    await expect(client.getSession()).resolves.toMatchObject({
+      role: "LEADER"
+    });
     expect(fetchImpl).toHaveBeenCalledWith("/api/v1/auth/session", {
       credentials: "same-origin",
       cache: "no-store",
@@ -57,14 +61,18 @@ describe("createAuthClient", () => {
   it("returns null when session recovery receives an authentication failure", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse({ code: "SESSION_EXPIRED", message: "会话已失效" }, 401));
+      .mockResolvedValue(
+        jsonResponse({ code: "SESSION_EXPIRED", message: "会话已失效" }, 401)
+      );
     const client = createAuthClient("/api", fetchImpl);
 
     await expect(client.getSession()).resolves.toBeNull();
   });
 
   it("sends login details as JSON and accepts the empty success response", async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(noContentResponse());
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(noContentResponse());
     const client = createAuthClient("/api", fetchImpl);
     const password = makePassword();
 
@@ -81,7 +89,9 @@ describe("createAuthClient", () => {
   });
 
   it("sends activation and reset tickets without retaining them", async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(noContentResponse());
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(noContentResponse());
     const client = createAuthClient("/api", fetchImpl);
     const activationTicket = makeOpaqueValue();
     const resetTicket = makeOpaqueValue();
@@ -98,7 +108,10 @@ describe("createAuthClient", () => {
         accept: "application/json",
         "content-type": "application/json"
       },
-      body: JSON.stringify({ ticket: activationTicket, password: activationPassword })
+      body: JSON.stringify({
+        ticket: activationTicket,
+        password: activationPassword
+      })
     });
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
@@ -116,7 +129,9 @@ describe("createAuthClient", () => {
   });
 
   it("posts empty JSON bodies for refresh and logout", async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(noContentResponse());
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(noContentResponse());
     const client = createAuthClient("/api", fetchImpl);
 
     await client.refresh();
@@ -149,7 +164,9 @@ describe("createAuthClient", () => {
   });
 
   it("posts both password values to change the current password", async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(noContentResponse());
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(noContentResponse());
     const client = createAuthClient("/api", fetchImpl);
     const currentPassword = makePassword();
     const newPassword = makePassword();
@@ -170,7 +187,9 @@ describe("createAuthClient", () => {
   it("parses the API error body consistently", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse({ code: "INVALID_CREDENTIALS", message: "登录失败" }, 400));
+      .mockResolvedValue(
+        jsonResponse({ code: "INVALID_CREDENTIALS", message: "登录失败" }, 400)
+      );
     const client = createAuthClient("/api", fetchImpl);
 
     await expect(client.login("member", makePassword())).rejects.toEqual(
@@ -202,7 +221,9 @@ describe("LoginView", () => {
     expect(screen.getByRole("button", { name: "登录中" })).toBeDisabled();
 
     completeLogin?.();
-    await waitFor(() => expect(screen.getByRole("button", { name: "登录" })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "登录" })).toBeEnabled()
+    );
   });
 
   it("shows a generic failure when login is rejected", async () => {
@@ -227,7 +248,9 @@ describe("LoginView", () => {
   it("notifies the parent after a successful login", async () => {
     const onSuccess = vi.fn();
 
-    render(<LoginView onLogin={() => Promise.resolve()} onSuccess={onSuccess} />);
+    render(
+      <LoginView onLogin={() => Promise.resolve()} onSuccess={onSuccess} />
+    );
 
     fireEvent.change(screen.getByLabelText("用户名"), {
       target: { value: "member" }
@@ -251,7 +274,9 @@ describe("SetPasswordView", () => {
       />
     );
 
-    expect(screen.getByRole("heading", { name: "激活账户" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "激活账户" })
+    ).toBeInTheDocument();
 
     rerender(
       <SetPasswordView
@@ -261,16 +286,14 @@ describe("SetPasswordView", () => {
       />
     );
 
-    expect(screen.getByRole("heading", { name: "重设密码" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "重设密码" })
+    ).toBeInTheDocument();
   });
 
   it("rejects a password shorter than twelve characters", () => {
     render(
-      <SetPasswordView
-        mode="activate"
-        onSubmit={vi.fn()}
-        onSuccess={vi.fn()}
-      />
+      <SetPasswordView mode="activate" onSubmit={vi.fn()} onSuccess={vi.fn()} />
     );
 
     fireEvent.change(screen.getByLabelText("一次性码"), {
@@ -289,11 +312,7 @@ describe("SetPasswordView", () => {
 
   it("rejects different password entries", () => {
     render(
-      <SetPasswordView
-        mode="reset"
-        onSubmit={vi.fn()}
-        onSuccess={vi.fn()}
-      />
+      <SetPasswordView mode="reset" onSubmit={vi.fn()} onSuccess={vi.fn()} />
     );
 
     fireEvent.change(screen.getByLabelText("一次性码"), {

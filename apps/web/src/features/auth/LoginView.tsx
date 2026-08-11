@@ -65,12 +65,24 @@ export function LoginView({ onLogin, onSuccess }: LoginViewProps) {
               title={passwordVisible ? "隐藏密码" : "显示密码"}
               type="button"
             >
-              {passwordVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+              {passwordVisible ? (
+                <EyeOff aria-hidden="true" />
+              ) : (
+                <Eye aria-hidden="true" />
+              )}
             </button>
           </span>
         </label>
-        {error ? <p className="form-error" role="alert">{error}</p> : null}
-        <button className="primary-button" disabled={isSubmitting} type="submit">
+        {error ? (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <button
+          className="primary-button"
+          disabled={isSubmitting}
+          type="submit"
+        >
           {isSubmitting ? "登录中" : "登录"}
         </button>
       </form>

@@ -2,7 +2,8 @@ import { ApiClientError, createApiClient } from "../../api-client.js";
 
 export type UserRole = "USER" | "LEADER" | "ADMIN";
 export type AccountStatus = "ACTIVE" | "DISABLED";
-export type CredentialStatus = "PENDING_ACTIVATION" | "READY" | "RESET_REQUIRED";
+export type CredentialStatus =
+  "PENDING_ACTIVATION" | "READY" | "RESET_REQUIRED";
 
 export interface ManagedUser {
   id: string;
@@ -23,7 +24,9 @@ export interface IssuedCredential {
 
 export interface AdminUsersClient {
   listUsers(): Promise<ManagedUser[]>;
-  createUser(input: Pick<ManagedUser, "username" | "displayName" | "role">): Promise<IssuedCredential>;
+  createUser(
+    input: Pick<ManagedUser, "username" | "displayName" | "role">
+  ): Promise<IssuedCredential>;
   reissueActivation(userId: string): Promise<IssuedCredential>;
   disableUser(userId: string): Promise<void>;
   enableUser(userId: string): Promise<void>;
@@ -55,7 +58,9 @@ function isManagedUser(value: unknown): value is ManagedUser {
     typeof value.id === "string" &&
     typeof value.username === "string" &&
     typeof value.displayName === "string" &&
-    (value.role === "USER" || value.role === "LEADER" || value.role === "ADMIN") &&
+    (value.role === "USER" ||
+      value.role === "LEADER" ||
+      value.role === "ADMIN") &&
     (value.accountStatus === "ACTIVE" || value.accountStatus === "DISABLED") &&
     (value.credentialStatus === "PENDING_ACTIVATION" ||
       value.credentialStatus === "READY" ||
@@ -78,7 +83,10 @@ function isIssuedCredential(value: unknown): value is IssuedCredential {
   );
 }
 
-async function readJson<T>(response: Response, guard: (value: unknown) => value is T): Promise<T> {
+async function readJson<T>(
+  response: Response,
+  guard: (value: unknown) => value is T
+): Promise<T> {
   let payload: unknown;
   try {
     payload = await response.json();
@@ -99,7 +107,11 @@ export function createAdminUsersClient(
 ): AdminUsersClient {
   const apiClient = createApiClient(apiBaseUrl, fetchImpl);
 
-  async function issue(path: string, method: "POST" | "PATCH", body: object = {}): Promise<IssuedCredential> {
+  async function issue(
+    path: string,
+    method: "POST" | "PATCH",
+    body: object = {}
+  ): Promise<IssuedCredential> {
     const response = await apiClient.request(path, {
       method,
       headers: JSON_HEADERS,
@@ -108,7 +120,11 @@ export function createAdminUsersClient(
     return readJson(response, isIssuedCredential);
   }
 
-  async function command(path: string, method: "POST" | "PATCH", body: object = {}): Promise<void> {
+  async function command(
+    path: string,
+    method: "POST" | "PATCH",
+    body: object = {}
+  ): Promise<void> {
     await apiClient.request(path, {
       method,
       headers: JSON_HEADERS,
@@ -122,8 +138,10 @@ export function createAdminUsersClient(
         cache: "no-store",
         headers: { accept: "application/json" }
       });
-      return readJson(response, (value): value is ManagedUser[] =>
-        Array.isArray(value) && value.every(isManagedUser)
+      return readJson(
+        response,
+        (value): value is ManagedUser[] =>
+          Array.isArray(value) && value.every(isManagedUser)
       );
     },
     createUser(input) {

@@ -1,8 +1,4 @@
-import type {
-  FastifyInstance,
-  FastifyReply,
-  FastifyRequest
-} from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import type { ApiConfig } from "../../config.js";
 import { ServiceError, type UserService } from "../users/user-service.js";
@@ -76,11 +72,14 @@ export function readSessionToken(
 
 export function sendApiError(error: unknown, reply: FastifyReply): void {
   if (error instanceof ApiError) {
-    reply.code(error.statusCode).send({ code: error.code, message: error.message });
+    reply
+      .code(error.statusCode)
+      .send({ code: error.code, message: error.message });
     return;
   }
   if (error instanceof AuthServiceError) {
-    const code = error.code === "INVALID_SESSION" ? "SESSION_EXPIRED" : error.code;
+    const code =
+      error.code === "INVALID_SESSION" ? "SESSION_EXPIRED" : error.code;
     reply.code(error.statusCode).send({ code, message: error.message });
     return;
   }

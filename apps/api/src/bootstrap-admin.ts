@@ -2,7 +2,10 @@ import { pathToFileURL } from "node:url";
 import { createInterface } from "node:readline/promises";
 
 import { parseApiConfig } from "./config.js";
-import { ServiceError, type UserService } from "./modules/users/user-service.js";
+import {
+  ServiceError,
+  type UserService
+} from "./modules/users/user-service.js";
 import { createRuntimeServices } from "./runtime.js";
 import { readHiddenPassword } from "./terminal-password.js";
 

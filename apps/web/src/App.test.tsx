@@ -110,7 +110,9 @@ describe("App", () => {
     expect(screen.getByText("正在恢复会话")).toBeInTheDocument();
 
     resolveSession?.(authenticationFailure());
-    expect(await screen.findByRole("heading", { name: "登录" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "登录" })
+    ).toBeInTheDocument();
   });
 
   it("shows login when there is no authenticated session", async () => {
@@ -119,20 +121,30 @@ describe("App", () => {
 
     render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
 
-    expect(await screen.findByRole("heading", { name: "登录" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "登录" })
+    ).toBeInTheDocument();
   });
 
   it("switches anonymous entry modes", async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(authenticationFailure());
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(authenticationFailure());
 
     render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
 
     await screen.findByRole("heading", { name: "登录" });
     fireEvent.click(screen.getByRole("button", { name: "使用激活码设置密码" }));
-    expect(screen.getByRole("heading", { name: "激活账户" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "激活账户" })
+    ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "使用重置码设置新密码" }));
-    expect(screen.getByRole("heading", { name: "重设密码" })).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "使用重置码设置新密码" })
+    );
+    expect(
+      screen.getByRole("heading", { name: "重设密码" })
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "返回登录" }));
     expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
@@ -140,7 +152,12 @@ describe("App", () => {
 
   it.each([
     ["激活", "使用激活码设置密码", "激活账户", "/auth/activate"],
-    ["重置", "使用重置码设置新密码", "重设密码", "/auth/password-reset/complete"]
+    [
+      "重置",
+      "使用重置码设置新密码",
+      "重设密码",
+      "/auth/password-reset/complete"
+    ]
   ] as const)(
     "completes %s from the anonymous entry flow",
     async (_, entryLabel, title, path) => {
@@ -158,7 +175,9 @@ describe("App", () => {
         return healthResponse();
       });
 
-      render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
+      render(
+        <App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />
+      );
 
       await screen.findByRole("heading", { name: "登录" });
       fireEvent.click(screen.getByRole("button", { name: entryLabel }));
@@ -175,7 +194,9 @@ describe("App", () => {
       });
       fireEvent.click(screen.getByRole("button", { name: "设置密码" }));
 
-      expect(await screen.findByRole("heading", { name: "登录" })).toBeInTheDocument();
+      expect(
+        await screen.findByRole("heading", { name: "登录" })
+      ).toBeInTheDocument();
       expect(fetchImpl).toHaveBeenCalledWith(`/api/v1${path}`, {
         method: "POST",
         credentials: "same-origin",
@@ -202,7 +223,9 @@ describe("App", () => {
     fillLoginForm();
     fireEvent.click(screen.getByRole("button", { name: "登录" }));
 
-    expect(await screen.findByRole("heading", { name: "账户" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "账户" })
+    ).toBeInTheDocument();
     expect(screen.getByText("LEADER")).toBeInTheDocument();
     expect(await screen.findAllByText("已连接")).toHaveLength(2);
     expect(screen.getAllByText(SYSTEM_VERSION)).toHaveLength(2);
@@ -226,7 +249,9 @@ describe("App", () => {
     await screen.findByRole("heading", { name: "账户" });
     fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
 
-    expect(await screen.findByText("会话已失效，请重新登录")).toBeInTheDocument();
+    expect(
+      await screen.findByText("会话已失效，请重新登录")
+    ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
   });
 
@@ -248,7 +273,9 @@ describe("App", () => {
     await screen.findByRole("heading", { name: "账户" });
     fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
 
-    expect(await screen.findByRole("heading", { name: "登录" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "登录" })
+    ).toBeInTheDocument();
     expect(screen.queryByText("USER")).not.toBeInTheDocument();
   });
 
@@ -271,10 +298,14 @@ describe("App", () => {
 
     render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
 
-    const adminUsersView = await screen.findByRole("region", { name: "用户管理" });
+    const adminUsersView = await screen.findByRole("region", {
+      name: "用户管理"
+    });
     expect(screen.getByRole("link", { name: "用户管理" })).toBeInTheDocument();
     expect(within(adminUsersView).getByRole("table")).toBeInTheDocument();
-    expect(await within(adminUsersView).findByText(user.username)).toBeInTheDocument();
+    expect(
+      await within(adminUsersView).findByText(user.username)
+    ).toBeInTheDocument();
   });
 
   it.each(["USER", "LEADER"] as const)(
@@ -287,11 +318,17 @@ describe("App", () => {
           : healthResponse();
       });
 
-      render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
+      render(
+        <App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />
+      );
 
       await screen.findByRole("heading", { name: "账户" });
-      expect(screen.queryByRole("link", { name: "用户管理" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("region", { name: "用户管理" })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: "用户管理" })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("region", { name: "用户管理" })
+      ).not.toBeInTheDocument();
     }
   );
 
