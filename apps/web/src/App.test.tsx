@@ -3,7 +3,13 @@
 import "@testing-library/jest-dom/vitest";
 
 import { SYSTEM_VERSION } from "@project-online/domain";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App.js";
@@ -27,6 +33,40 @@ function healthResponse(systemVersion: string = SYSTEM_VERSION): Response {
   );
 }
 
+function sessionResponse(role: "USER" | "LEADER" | "ADMIN"): Response {
+  return new Response(JSON.stringify({ userId: crypto.randomUUID(), role }), {
+    status: 200,
+    headers: { "content-type": "application/json" }
+  });
+}
+
+function authenticationFailure(): Response {
+  return new Response(
+    JSON.stringify({ code: "SESSION_EXPIRED", message: "会话已失效" }),
+    {
+      status: 401,
+      headers: { "content-type": "application/json" }
+    }
+  );
+}
+
+function noContentResponse(): Response {
+  return new Response(null, { status: 204 });
+}
+
+function makePassword(): string {
+  return `P${crypto.randomUUID()}!`;
+}
+
+function fillLoginForm(): void {
+  fireEvent.change(screen.getByLabelText("用户名"), {
+    target: { value: "member" }
+  });
+  fireEvent.change(screen.getByLabelText("密码"), {
+    target: { value: makePassword() }
+  });
+}
+
 describe("App", () => {
   it("shows missing configuration without requesting the API", () => {
     const fetchImpl = vi.fn<typeof fetch>();
@@ -39,38 +79,143 @@ describe("App", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("shows the connected API and shared version", async () => {
+  it("checks the session before choosing the initial view", async () => {
     const fetchImpl = vi.fn<typeof fetch>();
-    fetchImpl.mockResolvedValue(healthResponse());
+    let resolveSession: ((response: Response) => void) | undefined;
+    fetchImpl.mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveSession = resolve;
+        })
+    );
 
     render(
       <App apiBaseUrl="/api" environment="development" fetchImpl={fetchImpl} />
     );
 
-    expect(screen.getByText("正在检查")).toBeInTheDocument();
-    expect(await screen.findByText("已连接")).toBeInTheDocument();
-    expect(screen.getByText("api")).toBeInTheDocument();
-    expect(screen.getAllByText(SYSTEM_VERSION)).toHaveLength(2);
+    expect(screen.getByText("正在恢复会话")).toBeInTheDocument();
+
+    resolveSession?.(authenticationFailure());
+    expect(await screen.findByRole("heading", { name: "登录" })).toBeInTheDocument();
   });
 
-  it("shows a connection failure when the API is offline", async () => {
+  it("shows login when there is no authenticated session", async () => {
     const fetchImpl = vi.fn<typeof fetch>();
-    fetchImpl.mockRejectedValue(new Error("offline"));
+    fetchImpl.mockResolvedValue(authenticationFailure());
 
     render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
 
-    expect(await screen.findByText("连接失败")).toBeInTheDocument();
-    expect(screen.getByText("无法连接 API")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "登录" })).toBeInTheDocument();
   });
 
-  it("shows a version mismatch", async () => {
+  it("shows the account after successful login and preserves runtime information", async () => {
     const fetchImpl = vi.fn<typeof fetch>();
-    fetchImpl.mockResolvedValue(healthResponse("9.9.9"));
+    fetchImpl
+      .mockResolvedValueOnce(authenticationFailure())
+      .mockResolvedValueOnce(noContentResponse())
+      .mockResolvedValueOnce(sessionResponse("LEADER"))
+      .mockResolvedValue(healthResponse());
+
+    render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
+
+    await screen.findByRole("heading", { name: "登录" });
+    fillLoginForm();
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
+
+    expect(await screen.findByRole("heading", { name: "账户" })).toBeInTheDocument();
+    expect(screen.getByText("LEADER")).toBeInTheDocument();
+    expect(await screen.findAllByText("已连接")).toHaveLength(2);
+    expect(screen.getAllByText(SYSTEM_VERSION)).toHaveLength(2);
+  });
+
+  it("returns to login when an authenticated request receives 401", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    fetchImpl.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/auth/session")) {
+        return sessionResponse("USER");
+      }
+      if (url.endsWith("/auth/logout")) {
+        return authenticationFailure();
+      }
+      return healthResponse();
+    });
+
+    render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
+
+    await screen.findByRole("heading", { name: "账户" });
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
+
+    expect(await screen.findByText("会话已失效，请重新登录")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
+  });
+
+  it("clears the user after logout", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    fetchImpl.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/auth/session")) {
+        return sessionResponse("USER");
+      }
+      if (url.endsWith("/auth/logout")) {
+        return noContentResponse();
+      }
+      return healthResponse();
+    });
+
+    render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
+
+    await screen.findByRole("heading", { name: "账户" });
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
+
+    expect(await screen.findByRole("heading", { name: "登录" })).toBeInTheDocument();
+    expect(screen.queryByText("USER")).not.toBeInTheDocument();
+  });
+
+  it("shows the user-management entry only to administrators", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    fetchImpl.mockImplementation(async (input) => {
+      return String(input).endsWith("/auth/session")
+        ? sessionResponse("ADMIN")
+        : healthResponse();
+    });
+
+    render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
+
+    expect(
+      await screen.findByRole("link", { name: "用户管理" })
+    ).toBeInTheDocument();
+  });
+
+  it.each(["USER", "LEADER"] as const)(
+    "does not show user management to %s",
+    async (role) => {
+      const fetchImpl = vi.fn<typeof fetch>();
+      fetchImpl.mockImplementation(async (input) => {
+        return String(input).endsWith("/auth/session")
+          ? sessionResponse(role)
+          : healthResponse();
+      });
+
+      render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
+
+      await screen.findByRole("heading", { name: "账户" });
+      expect(screen.queryByRole("link", { name: "用户管理" })).not.toBeInTheDocument();
+    }
+  );
+
+  it("shows a version mismatch in the authenticated toolbar", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    fetchImpl.mockImplementation(async (input) => {
+      return String(input).endsWith("/auth/session")
+        ? sessionResponse("USER")
+        : healthResponse("9.9.9");
+    });
 
     render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
 
     await waitFor(() => {
-      expect(screen.getByText("版本不一致")).toBeInTheDocument();
+      expect(screen.getAllByText("版本不一致")).toHaveLength(2);
     });
   });
 });
