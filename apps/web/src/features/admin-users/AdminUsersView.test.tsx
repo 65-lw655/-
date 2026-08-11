@@ -143,7 +143,12 @@ describe("AdminUsersView", () => {
 
   it("reissues an activation code for a pending account", async () => {
     const pendingUser = createUser({ credentialStatus: "PENDING_ACTIVATION" });
+    const refreshedUser = {
+      ...pendingUser,
+      updatedAt: "2026-08-11T09:00:00.000Z"
+    };
     const activationCode = crypto.randomUUID();
+    let listRequestCount = 0;
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith(`/${pendingUser.id}/activation`)) {
@@ -153,7 +158,8 @@ describe("AdminUsersView", () => {
           expiresAt: "2026-08-12T08:00:00.000Z"
         });
       }
-      return jsonResponse([pendingUser]);
+      listRequestCount += 1;
+      return jsonResponse(listRequestCount === 1 ? [pendingUser] : [refreshedUser]);
     });
 
     renderView(fetchImpl);
@@ -163,17 +169,36 @@ describe("AdminUsersView", () => {
 
     expect(await screen.findByText("激活码仅显示一次")).toBeInTheDocument();
     expect(screen.getByText(activationCode)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchImpl.mock.calls.map(([input]) => String(input))).toEqual([
+        `${API_BASE_URL}/v1/users`,
+        `${API_BASE_URL}/v1/users/${pendingUser.id}/activation`,
+        `${API_BASE_URL}/v1/users`
+      ]);
+      expect(screen.getByText(refreshedUser.updatedAt)).toBeInTheDocument();
+    });
   });
 
   it("requires confirmation before disabling and enabling accounts", async () => {
     const activeUser = createUser();
     const disabledUser = createUser({ accountStatus: "DISABLED" });
+    const disabledActiveUser = { ...activeUser, accountStatus: "DISABLED" as const };
+    const enabledUser = { ...disabledUser, accountStatus: "ACTIVE" as const };
+    let listRequestCount = 0;
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith(`/${activeUser.id}/disable`) || url.endsWith(`/${disabledUser.id}/enable`)) {
         return noContent();
       }
-      return jsonResponse([activeUser, disabledUser]);
+      listRequestCount += 1;
+      if (listRequestCount === 1) {
+        return jsonResponse([activeUser, disabledUser]);
+      }
+      return jsonResponse(
+        listRequestCount === 2
+          ? [disabledActiveUser, disabledUser]
+          : [disabledActiveUser, enabledUser]
+      );
     });
 
     renderView(fetchImpl);
@@ -188,31 +213,42 @@ describe("AdminUsersView", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "确认停用" }));
     await waitFor(() => {
-      expect(fetchImpl).toHaveBeenCalledWith(
+      expect(fetchImpl.mock.calls.map(([input]) => String(input))).toEqual([
+        `${API_BASE_URL}/v1/users`,
         `${API_BASE_URL}/v1/users/${activeUser.id}/disable`,
-        expect.objectContaining({ method: "POST" })
-      );
+        `${API_BASE_URL}/v1/users`
+      ]);
+      const row = screen.getByRole("row", { name: new RegExp(activeUser.username) });
+      expect(within(row).getByText("停用")).toBeInTheDocument();
     });
 
     openActions(disabledUser);
     fireEvent.click(screen.getByRole("menuitem", { name: "启用" }));
     fireEvent.click(screen.getByRole("button", { name: "确认启用" }));
     await waitFor(() => {
-      expect(fetchImpl).toHaveBeenCalledWith(
+      expect(fetchImpl.mock.calls.map(([input]) => String(input))).toEqual([
+        `${API_BASE_URL}/v1/users`,
+        `${API_BASE_URL}/v1/users/${activeUser.id}/disable`,
+        `${API_BASE_URL}/v1/users`,
         `${API_BASE_URL}/v1/users/${disabledUser.id}/enable`,
-        expect.objectContaining({ method: "POST" })
-      );
+        `${API_BASE_URL}/v1/users`
+      ]);
+      const row = screen.getByRole("row", { name: new RegExp(disabledUser.username) });
+      expect(within(row).getByText("启用")).toBeInTheDocument();
     });
   });
 
   it("uses the role menu and confirms a role change", async () => {
     const user = createUser();
+    const refreshedUser = { ...user, role: "LEADER" as const };
+    let listRequestCount = 0;
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith(`/${user.id}/role`) && init?.method === "PATCH") {
         return jsonResponse({ ...user, role: "LEADER" });
       }
-      return jsonResponse([user]);
+      listRequestCount += 1;
+      return jsonResponse(listRequestCount === 1 ? [user] : [refreshedUser]);
     });
 
     renderView(fetchImpl);
@@ -225,19 +261,24 @@ describe("AdminUsersView", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认调整" }));
 
     await waitFor(() => {
-      expect(fetchImpl).toHaveBeenCalledWith(
+      expect(fetchImpl.mock.calls.map(([input]) => String(input))).toEqual([
+        `${API_BASE_URL}/v1/users`,
         `${API_BASE_URL}/v1/users/${user.id}/role`,
-        expect.objectContaining({
-          method: "PATCH",
-          body: JSON.stringify({ role: "LEADER" })
-        })
-      );
+        `${API_BASE_URL}/v1/users`
+      ]);
+      const row = screen.getByRole("row", { name: new RegExp(user.username) });
+      expect(within(row).getByText("负责人")).toBeInTheDocument();
     });
   });
 
   it("confirms password reset and displays its code once", async () => {
     const user = createUser();
+    const refreshedUser = {
+      ...user,
+      credentialStatus: "RESET_REQUIRED" as const
+    };
     const resetCode = crypto.randomUUID();
+    let listRequestCount = 0;
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith(`/${user.id}/password-reset`)) {
@@ -247,7 +288,8 @@ describe("AdminUsersView", () => {
           expiresAt: "2026-08-11T08:30:00.000Z"
         });
       }
-      return jsonResponse([user]);
+      listRequestCount += 1;
+      return jsonResponse(listRequestCount === 1 ? [user] : [refreshedUser]);
     });
 
     renderView(fetchImpl);
@@ -259,6 +301,15 @@ describe("AdminUsersView", () => {
 
     expect(await screen.findByText("重置码仅显示一次")).toBeInTheDocument();
     expect(screen.getByText(resetCode)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchImpl.mock.calls.map(([input]) => String(input))).toEqual([
+        `${API_BASE_URL}/v1/users`,
+        `${API_BASE_URL}/v1/users/${user.id}/password-reset`,
+        `${API_BASE_URL}/v1/users`
+      ]);
+      const row = screen.getByRole("row", { name: new RegExp(user.username) });
+      expect(within(row).getByText("待重置")).toBeInTheDocument();
+    });
     fireEvent.click(screen.getByRole("button", { name: "关闭" }));
     expect(screen.queryByText(resetCode)).not.toBeInTheDocument();
   });
