@@ -4,6 +4,8 @@ export interface ApiConfig {
   host: string;
   port: number;
   environment: AppEnvironment;
+  webOrigin: string;
+  authStorePath: string;
 }
 
 const APP_ENVIRONMENTS = new Set<AppEnvironment>([
@@ -29,9 +31,32 @@ export function parseApiConfig(
     throw new Error("APP_ENV must be development, test, or production");
   }
 
+  const webOrigin = env.WEB_ORIGIN ?? "http://127.0.0.1:5173";
+  try {
+    const parsedOrigin = new URL(webOrigin);
+    if (
+      (parsedOrigin.protocol !== "http:" &&
+        parsedOrigin.protocol !== "https:") ||
+      parsedOrigin.origin !== webOrigin
+    ) {
+      throw new Error();
+    }
+  } catch {
+    throw new Error(
+      "WEB_ORIGIN must be an HTTP(S) origin without path, query, or hash"
+    );
+  }
+
+  const authStorePath = env.AUTH_STORE_PATH ?? ".local-data/auth-store.json";
+  if (authStorePath.trim().length === 0) {
+    throw new Error("AUTH_STORE_PATH must not be empty");
+  }
+
   return {
     host: env.API_HOST?.trim() || "127.0.0.1",
     port,
-    environment
+    environment,
+    webOrigin,
+    authStorePath
   };
 }

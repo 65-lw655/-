@@ -6,9 +6,24 @@ import {
   Layers3,
   Settings2
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode
+} from "react";
 
+import { ApiClientError } from "./api-client.js";
 import { resolveWebConfig } from "./config.js";
+import { AccountView } from "./features/auth/AccountView.js";
+import { AdminUsersView } from "./features/admin-users/AdminUsersView.js";
+import {
+  createAuthClient,
+  type SessionUser
+} from "./features/auth/auth-client.js";
+import { LoginView } from "./features/auth/LoginView.js";
+import { SetPasswordView } from "./features/auth/SetPasswordView.js";
 import { checkApiHealth } from "./health-client.js";
 
 type ApiStatus =
@@ -19,6 +34,14 @@ type ApiStatus =
       title: "配置缺失" | "连接失败" | "版本不一致";
       message: string;
     };
+
+type SessionState =
+  | { kind: "checking" }
+  | { kind: "anonymous" }
+  | { kind: "authenticated"; user: SessionUser }
+  | { kind: "sessionExpired" };
+
+type AuthEntryMode = "login" | "activate" | "reset";
 
 interface ApiCheck {
   apiBaseUrl: string;
@@ -53,19 +76,83 @@ function StatusIcon({ status }: { status: ApiStatus }): ReactNode {
   );
 }
 
+function ApiStatusPanel({ status }: { status: ApiStatus }) {
+  return (
+    <div className="status-panel" data-status={status.kind}>
+      <div className="status-panel__summary">
+        <span className="status-panel__icon">
+          <StatusIcon status={status} />
+        </span>
+        <div>
+          <p className="status-panel__label">API 服务</p>
+          <h3>{status.title}</h3>
+          <p className="status-panel__message">
+            {status.kind === "connected" ? "服务响应正常" : status.message}
+          </p>
+        </div>
+      </div>
+      {status.kind === "connected" ? (
+        <dl className="status-details">
+          <div>
+            <dt>服务标识</dt>
+            <dd>{status.service}</dd>
+          </div>
+          <div>
+            <dt>API 版本</dt>
+            <dd>{status.version}</dd>
+          </div>
+        </dl>
+      ) : null}
+    </div>
+  );
+}
+
 export function App({
   apiBaseUrl = import.meta.env.VITE_API_BASE_URL,
   environment = import.meta.env.MODE,
   fetchImpl = fetch
 }: AppProps) {
+  const config = useMemo(() => resolveWebConfig(apiBaseUrl), [apiBaseUrl]);
+  const authClient = useMemo(
+    () => (config.ok ? createAuthClient(config.apiBaseUrl, fetchImpl) : null),
+    [config, fetchImpl]
+  );
+  const [session, setSession] = useState<SessionState>({ kind: "checking" });
+  const [authEntryMode, setAuthEntryMode] = useState<AuthEntryMode>("login");
   const [apiCheck, setApiCheck] = useState<ApiCheck>({
     apiBaseUrl: "",
     status: CHECKING_STATUS
   });
 
   useEffect(() => {
-    const config = resolveWebConfig(apiBaseUrl);
-    if (!config.ok) {
+    if (authClient === null) {
+      return;
+    }
+
+    let active = true;
+
+    void authClient
+      .getSession()
+      .then((user) => {
+        if (active) {
+          setSession(
+            user ? { kind: "authenticated", user } : { kind: "anonymous" }
+          );
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSession({ kind: "anonymous" });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authClient]);
+
+  useEffect(() => {
+    if (!config.ok || session.kind !== "authenticated") {
       return;
     }
 
@@ -102,14 +189,94 @@ export function App({
     return () => {
       active = false;
     };
-  }, [apiBaseUrl, fetchImpl]);
+  }, [config, fetchImpl, session.kind]);
 
-  const config = resolveWebConfig(apiBaseUrl);
-  const status: ApiStatus = !config.ok
-    ? { kind: "error", title: "配置缺失", message: config.message }
-    : apiCheck.apiBaseUrl === config.apiBaseUrl
+  async function handleLogin(
+    username: string,
+    password: string
+  ): Promise<void> {
+    if (!authClient) {
+      throw new Error("Authentication API is unavailable");
+    }
+
+    await authClient.login(username, password);
+    const user = await authClient.getSession();
+    setSession(user ? { kind: "authenticated", user } : { kind: "anonymous" });
+  }
+
+  async function handleLogout(): Promise<void> {
+    if (!authClient) {
+      setSession({ kind: "anonymous" });
+      return;
+    }
+
+    try {
+      await authClient.logout();
+      setSession({ kind: "anonymous" });
+    } catch (error) {
+      setSession(
+        error instanceof ApiClientError && error.status === 401
+          ? { kind: "sessionExpired" }
+          : { kind: "anonymous" }
+      );
+    }
+  }
+
+  const handleSessionExpired = useCallback(() => {
+    setSession({ kind: "sessionExpired" });
+  }, []);
+
+  async function handleChangePassword(
+    currentPassword: string,
+    newPassword: string
+  ): Promise<void> {
+    if (!authClient) {
+      throw new Error("Authentication API is unavailable");
+    }
+
+    try {
+      await authClient.changePassword(currentPassword, newPassword);
+    } catch (error) {
+      if (
+        error instanceof ApiClientError &&
+        error.status === 401 &&
+        (error.code === "SESSION_EXPIRED" ||
+          error.code === "AUTHENTICATION_REQUIRED")
+      ) {
+        handleSessionExpired();
+      }
+      throw error;
+    }
+  }
+
+  async function handleActivation(
+    ticket: string,
+    password: string
+  ): Promise<void> {
+    if (!authClient) {
+      throw new Error("Authentication API is unavailable");
+    }
+
+    await authClient.activate(ticket, password);
+  }
+
+  async function handleReset(ticket: string, password: string): Promise<void> {
+    if (!authClient) {
+      throw new Error("Authentication API is unavailable");
+    }
+
+    await authClient.completeReset(ticket, password);
+  }
+
+  const status: ApiStatus = config.ok
+    ? apiCheck.apiBaseUrl === config.apiBaseUrl
       ? apiCheck.status
-      : CHECKING_STATUS;
+      : CHECKING_STATUS
+    : { kind: "error", title: "配置缺失", message: config.message };
+
+  const currentSession: SessionState =
+    authClient === null ? { kind: "anonymous" } : session;
+  const authenticated = currentSession.kind === "authenticated";
 
   return (
     <div className="app-shell">
@@ -121,56 +288,104 @@ export function App({
             </span>
             <h1>项目管理线上版</h1>
           </div>
-
-          <dl className="runtime-meta" aria-label="运行信息">
-            <div>
-              <dt>环境</dt>
-              <dd>{environment}</dd>
-            </div>
-            <div>
-              <dt>系统版本</dt>
-              <dd>{SYSTEM_VERSION}</dd>
-            </div>
-          </dl>
+          {authenticated ? (
+            <dl className="runtime-meta" aria-label="运行信息">
+              <div>
+                <dt>环境</dt>
+                <dd>{environment}</dd>
+              </div>
+              <div>
+                <dt>系统版本</dt>
+                <dd>{SYSTEM_VERSION}</dd>
+              </div>
+              <div>
+                <dt>API</dt>
+                <dd>{status.title}</dd>
+              </div>
+            </dl>
+          ) : null}
         </div>
       </header>
 
       <main className="main-content">
-        <section className="status-section" aria-labelledby="service-status">
-          <div className="section-heading">
-            <h2 id="service-status">服务状态</h2>
-          </div>
-
-          <div className="status-panel" data-status={status.kind}>
-            <div className="status-panel__summary">
-              <span className="status-panel__icon">
-                <StatusIcon status={status} />
-              </span>
-              <div>
-                <p className="status-panel__label">API 服务</p>
-                <h3>{status.title}</h3>
-                {status.kind === "checking" || status.kind === "error" ? (
-                  <p className="status-panel__message">{status.message}</p>
-                ) : (
-                  <p className="status-panel__message">服务响应正常</p>
-                )}
-              </div>
-            </div>
-
-            {status.kind === "connected" ? (
-              <dl className="status-details">
-                <div>
-                  <dt>服务标识</dt>
-                  <dd>{status.service}</dd>
-                </div>
-                <div>
-                  <dt>API 版本</dt>
-                  <dd>{status.version}</dd>
-                </div>
-              </dl>
+        {currentSession.kind === "checking" ? (
+          <p className="session-message" role="status">
+            正在恢复会话
+          </p>
+        ) : null}
+        {currentSession.kind === "anonymous" ||
+        currentSession.kind === "sessionExpired" ? (
+          <div className="auth-layout">
+            {currentSession.kind === "sessionExpired" ? (
+              <p className="form-error" role="alert">
+                会话已失效，请重新登录
+              </p>
             ) : null}
+            {!config.ok ? (
+              <p className="form-error" role="alert">
+                {config.message}
+              </p>
+            ) : null}
+            <div className="auth-entry-actions">
+              {authEntryMode !== "login" ? (
+                <button
+                  className="secondary-button"
+                  onClick={() => setAuthEntryMode("login")}
+                  type="button"
+                >
+                  返回登录
+                </button>
+              ) : null}
+              {authEntryMode !== "activate" ? (
+                <button
+                  className="secondary-button"
+                  onClick={() => setAuthEntryMode("activate")}
+                  type="button"
+                >
+                  使用激活码设置密码
+                </button>
+              ) : null}
+              {authEntryMode !== "reset" ? (
+                <button
+                  className="secondary-button"
+                  onClick={() => setAuthEntryMode("reset")}
+                  type="button"
+                >
+                  使用重置码设置新密码
+                </button>
+              ) : null}
+            </div>
+            {authEntryMode === "login" ? (
+              <LoginView onLogin={handleLogin} onSuccess={() => undefined} />
+            ) : (
+              <SetPasswordView
+                key={authEntryMode}
+                mode={authEntryMode}
+                onSubmit={
+                  authEntryMode === "activate" ? handleActivation : handleReset
+                }
+                onSuccess={() => setAuthEntryMode("login")}
+              />
+            )}
           </div>
-        </section>
+        ) : null}
+        {authenticated ? (
+          <section className="authenticated-content">
+            <AccountView
+              user={currentSession.user}
+              onChangePassword={handleChangePassword}
+              onLogout={() => void handleLogout()}
+            />
+            {currentSession.user.role === "ADMIN" && config.ok ? (
+              <AdminUsersView
+                apiBaseUrl={config.apiBaseUrl}
+                fetchImpl={fetchImpl}
+                onSessionExpired={handleSessionExpired}
+              />
+            ) : null}
+            <ApiStatusPanel status={status} />
+          </section>
+        ) : null}
       </main>
     </div>
   );

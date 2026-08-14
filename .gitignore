@@ -10,6 +10,7 @@ target/
 .env
 .env.*
 !.env.example
+.local-data/
 
 # Local operating-system files and caches
 .DS_Store
