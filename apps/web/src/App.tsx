@@ -6,7 +6,13 @@ import {
   Layers3,
   Settings2
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode
+} from "react";
 
 import { ApiClientError } from "./api-client.js";
 import { resolveWebConfig } from "./config.js";
@@ -216,6 +222,33 @@ export function App({
     }
   }
 
+  const handleSessionExpired = useCallback(() => {
+    setSession({ kind: "sessionExpired" });
+  }, []);
+
+  async function handleChangePassword(
+    currentPassword: string,
+    newPassword: string
+  ): Promise<void> {
+    if (!authClient) {
+      throw new Error("Authentication API is unavailable");
+    }
+
+    try {
+      await authClient.changePassword(currentPassword, newPassword);
+    } catch (error) {
+      if (
+        error instanceof ApiClientError &&
+        error.status === 401 &&
+        (error.code === "SESSION_EXPIRED" ||
+          error.code === "AUTHENTICATION_REQUIRED")
+      ) {
+        handleSessionExpired();
+      }
+      throw error;
+    }
+  }
+
   async function handleActivation(
     ticket: string,
     password: string
@@ -340,12 +373,14 @@ export function App({
           <section className="authenticated-content">
             <AccountView
               user={currentSession.user}
+              onChangePassword={handleChangePassword}
               onLogout={() => void handleLogout()}
             />
             {currentSession.user.role === "ADMIN" && config.ok ? (
               <AdminUsersView
                 apiBaseUrl={config.apiBaseUrl}
                 fetchImpl={fetchImpl}
+                onSessionExpired={handleSessionExpired}
               />
             ) : null}
             <ApiStatusPanel status={status} />

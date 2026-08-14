@@ -78,6 +78,30 @@ describe("readHiddenPassword", () => {
     expect(input.rawModes).toEqual([true, false]);
   });
 
+  it("preserves a UTF-8 character split across input chunks", async () => {
+    const input = new TestTerminalInput();
+    const output = createOutput();
+    const prefix = randomUUID();
+    const character = Buffer.from("密");
+    const reading = readHiddenPassword(
+      "Password: ",
+      asInput(input),
+      output.stream
+    );
+
+    input.emit(
+      "data",
+      Buffer.concat([Buffer.from(prefix), character.subarray(0, 1)])
+    );
+    input.emit(
+      "data",
+      Buffer.concat([character.subarray(1), Buffer.from("\r")])
+    );
+
+    await expect(reading).resolves.toBe(`${prefix}密`);
+    expect(output.writes.join("")).not.toContain(prefix);
+  });
+
   it("rejects Ctrl+C and restores raw mode", async () => {
     const input = new TestTerminalInput();
     const output = createOutput();

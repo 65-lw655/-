@@ -477,6 +477,17 @@ select {
   gap: 12px;
 }
 
+.account-password-form {
+  width: min(100%, 320px);
+  margin-top: 0;
+}
+
+.account-password-form [role="status"] {
+  margin: 0;
+  color: #2f6b3d;
+  font-size: 14px;
+}
+
 .account-card a {
   color: #24272c;
   text-decoration: none;

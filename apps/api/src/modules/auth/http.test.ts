@@ -63,7 +63,10 @@ async function bootstrapAndLogin(
     user,
     password,
     cookie: setCookie.split(";", 1)[0] as string,
-    setCookie
+    setCookie,
+    principal: await harness.authService.authenticate(
+      (setCookie.split(";", 1)[0] as string).split("=", 2)[1] as string
+    )
   };
 }
 
@@ -71,19 +74,12 @@ describe("authentication HTTP API", () => {
   it("activates a pending account without returning credential data", async () => {
     const harness = await createHarness();
     try {
-      const admin = await harness.userService.bootstrapAdmin({
-        username: `admin-${randomUUID()}`,
-        displayName: "Administrator",
-        password: runtimePassword()
+      const admin = await bootstrapAndLogin(harness);
+      const issued = await harness.userService.createUser(admin.principal, {
+        username: `user-${randomUUID()}`,
+        displayName: "New user",
+        role: "USER"
       });
-      const issued = await harness.userService.createUser(
-        { userId: admin.id, sessionId: randomUUID(), role: "ADMIN" },
-        {
-          username: `user-${randomUUID()}`,
-          displayName: "New user",
-          role: "USER"
-        }
-      );
 
       const response = await harness.app.inject({
         method: "POST",
@@ -251,17 +247,8 @@ describe("authentication HTTP API", () => {
   it("completes a password reset without returning credential data", async () => {
     const harness = await createHarness();
     try {
-      const admin = await harness.userService.bootstrapAdmin({
-        username: `admin-${randomUUID()}`,
-        displayName: "Administrator",
-        password: runtimePassword()
-      });
-      const principal = {
-        userId: admin.id,
-        sessionId: randomUUID(),
-        role: "ADMIN" as const
-      };
-      const created = await harness.userService.createUser(principal, {
+      const admin = await bootstrapAndLogin(harness);
+      const created = await harness.userService.createUser(admin.principal, {
         username: `user-${randomUUID()}`,
         displayName: "Reset user",
         role: "USER"
@@ -271,7 +258,7 @@ describe("authentication HTTP API", () => {
         password: runtimePassword()
       });
       const reset = await harness.userService.issuePasswordReset(
-        principal,
+        admin.principal,
         created.user.id
       );
 

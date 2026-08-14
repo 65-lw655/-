@@ -321,13 +321,13 @@ npm run verify
 
 ### 工作区
 
-| 工作区 | M1 职责 |
+| 工作区 | M2 职责 |
 | --- | --- |
-| `packages/domain` | 提供唯一系统版本常量 |
+| `packages/domain` | 提供系统版本、账号状态、角色和纯授权规则 |
 | `packages/ui` | 共享 UI 包边界，尚无组件库 |
 | `packages/sync` | 同步包边界，尚无同步实现 |
-| `apps/api` | Fastify 应用和版本化健康检查 |
-| `apps/web` | React 开发状态页和 API 连通检查 |
+| `apps/api` | Fastify 健康检查、账号、会话、用户管理和本机文件状态适配 |
+| `apps/web` | React 登录、激活、改密、会话恢复和管理员用户管理 |
 | `apps/desktop` | 桌面包边界，尚未接入 Tauri |
 
-M1 不连接数据库，不包含账号登录、项目业务、离线编辑、文件上传或桌面安装包。
+M2 不连接数据库，不包含项目业务、离线编辑、文件上传、多实例生产存储或桌面安装包。

@@ -17,15 +17,20 @@ export function LoginView({ onLogin, onSuccess }: LoginViewProps) {
     event.preventDefault();
     setIsSubmitting(true);
     setError("");
+    let succeeded = false;
 
     try {
       await onLogin(username, password);
-      setPassword("");
-      onSuccess();
+      succeeded = true;
     } catch {
       setError("登录失败，请稍后重试");
     } finally {
+      setPassword("");
       setIsSubmitting(false);
+    }
+
+    if (succeeded) {
+      onSuccess();
     }
   }
 

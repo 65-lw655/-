@@ -7,7 +7,7 @@ import type { ApiConfig } from "../../config.js";
 import { MemoryAuthStateStore } from "../../storage/memory-auth-state-store.js";
 import { AuthService } from "../auth/auth-service.js";
 import type { PasswordHasher } from "../auth/password.js";
-import { UserService } from "./user-service.js";
+import { UserService, type AuthenticatedPrincipal } from "./user-service.js";
 
 function runtimePassword(): string {
   return `${randomUUID()}Aa1!`;
@@ -41,6 +41,7 @@ async function createHarness() {
   };
   return {
     app: buildApp(config, { authService, userService }),
+    authService,
     config,
     userService
   };
@@ -69,20 +70,28 @@ async function createAdmin(harness: Awaited<ReturnType<typeof createHarness>>) {
     displayName: "Administrator",
     password
   });
-  return { user, cookie: await login(harness, username, password) };
+  const cookie = await login(harness, username, password);
+  return {
+    user,
+    cookie,
+    principal: await harness.authService.authenticate(
+      cookie.split("=", 2)[1] as string
+    )
+  };
 }
 
 async function createReadyUser(
   harness: Awaited<ReturnType<typeof createHarness>>,
-  adminId: string,
+  adminPrincipal: AuthenticatedPrincipal,
   role: "USER" | "LEADER" | "ADMIN" = "USER"
 ) {
   const username = `user-${randomUUID()}`;
   const password = runtimePassword();
-  const created = await harness.userService.createUser(
-    { userId: adminId, sessionId: randomUUID(), role: "ADMIN" },
-    { username, displayName: "Project user", role }
-  );
+  const created = await harness.userService.createUser(adminPrincipal, {
+    username,
+    displayName: "Project user",
+    role
+  });
   await harness.userService.activate({ ticket: created.ticket, password });
   return {
     user: created.user,
@@ -147,7 +156,7 @@ describe("administrator user HTTP API", () => {
       expect(unauthenticated.json().code).toBe("AUTHENTICATION_REQUIRED");
 
       const admin = await createAdmin(harness);
-      const regular = await createReadyUser(harness, admin.user.id);
+      const regular = await createReadyUser(harness, admin.principal);
       const forbidden = await harness.app.inject({
         method: "GET",
         url: "/api/v1/users",
@@ -164,7 +173,7 @@ describe("administrator user HTTP API", () => {
     const harness = await createHarness();
     try {
       const admin = await createAdmin(harness);
-      const regular = await createReadyUser(harness, admin.user.id);
+      const regular = await createReadyUser(harness, admin.principal);
 
       const disabled = await harness.app.inject({
         method: "POST",
@@ -219,14 +228,11 @@ describe("administrator user HTTP API", () => {
     const harness = await createHarness();
     try {
       const admin = await createAdmin(harness);
-      const pending = await harness.userService.createUser(
-        { userId: admin.user.id, sessionId: randomUUID(), role: "ADMIN" },
-        {
-          username: `pending-${randomUUID()}`,
-          displayName: "Pending user",
-          role: "USER"
-        }
-      );
+      const pending = await harness.userService.createUser(admin.principal, {
+        username: `pending-${randomUUID()}`,
+        displayName: "Pending user",
+        role: "USER"
+      });
       const activation = await harness.app.inject({
         method: "POST",
         url: `/api/v1/users/${pending.user.id}/activation`,
@@ -240,7 +246,7 @@ describe("administrator user HTTP API", () => {
       expect(activation.json().ticket).not.toBe(pending.ticket);
       expectNoStoredCredentialFields(activation.json());
 
-      const ready = await createReadyUser(harness, admin.user.id);
+      const ready = await createReadyUser(harness, admin.principal);
       const reset = await harness.app.inject({
         method: "POST",
         url: `/api/v1/users/${ready.user.id}/password-reset`,
@@ -285,7 +291,7 @@ describe("administrator user HTTP API", () => {
     const harness = await createHarness();
     try {
       const admin = await createAdmin(harness);
-      const regular = await createReadyUser(harness, admin.user.id);
+      const regular = await createReadyUser(harness, admin.principal);
       const wrongOrigin = await harness.app.inject({
         method: "POST",
         url: `/api/v1/users/${regular.user.id}/disable`,
@@ -317,14 +323,11 @@ describe("administrator user HTTP API", () => {
     const harness = await createHarness();
     try {
       const admin = await createAdmin(harness);
-      const pending = await harness.userService.createUser(
-        { userId: admin.user.id, sessionId: randomUUID(), role: "ADMIN" },
-        {
-          username: `pending-${randomUUID()}`,
-          displayName: "Pending user",
-          role: "USER"
-        }
-      );
+      const pending = await harness.userService.createUser(admin.principal, {
+        username: `pending-${randomUUID()}`,
+        displayName: "Pending user",
+        role: "USER"
+      });
 
       const response = await harness.app.inject({
         method: "POST",
@@ -347,7 +350,7 @@ describe("administrator user HTTP API", () => {
     const harness = await createHarness();
     try {
       const admin = await createAdmin(harness);
-      const regular = await createReadyUser(harness, admin.user.id);
+      const regular = await createReadyUser(harness, admin.principal);
       const response = await harness.app.inject({
         method: "POST",
         url: `/api/v1/users/${regular.user.id}/disable`,
@@ -369,11 +372,8 @@ describe("administrator user HTTP API", () => {
     const harness = await createHarness();
     try {
       const admin = await createAdmin(harness);
-      const regular = await createReadyUser(harness, admin.user.id);
-      await harness.userService.disableUser(
-        { userId: admin.user.id, sessionId: randomUUID(), role: "ADMIN" },
-        regular.user.id
-      );
+      const regular = await createReadyUser(harness, admin.principal);
+      await harness.userService.disableUser(admin.principal, regular.user.id);
       const response = await harness.app.inject({
         method: "POST",
         url: `/api/v1/users/${regular.user.id}/enable`,
@@ -395,7 +395,7 @@ describe("administrator user HTTP API", () => {
     const harness = await createHarness();
     try {
       const admin = await createAdmin(harness);
-      const regular = await createReadyUser(harness, admin.user.id);
+      const regular = await createReadyUser(harness, admin.principal);
       const response = await harness.app.inject({
         method: "POST",
         url: `/api/v1/users/${regular.user.id}/password-reset`,
@@ -417,14 +417,11 @@ describe("administrator user HTTP API", () => {
     const harness = await createHarness();
     try {
       const admin = await createAdmin(harness);
-      const pending = await harness.userService.createUser(
-        { userId: admin.user.id, sessionId: randomUUID(), role: "ADMIN" },
-        {
-          username: `pending-${randomUUID()}`,
-          displayName: "Pending user",
-          role: "USER"
-        }
-      );
+      const pending = await harness.userService.createUser(admin.principal, {
+        username: `pending-${randomUUID()}`,
+        displayName: "Pending user",
+        role: "USER"
+      });
 
       const response = await harness.app.inject({
         method: "POST",

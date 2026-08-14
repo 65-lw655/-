@@ -255,6 +255,124 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
   });
 
+  it("changes the current password from the account view", async () => {
+    const currentPassword = makePassword();
+    const newPassword = makePassword();
+    const fetchImpl = vi.fn<typeof fetch>();
+    fetchImpl.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/auth/session")) {
+        return sessionResponse("USER");
+      }
+      if (url.endsWith("/auth/password/change")) {
+        return noContentResponse();
+      }
+      return healthResponse();
+    });
+
+    render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
+
+    await screen.findByRole("heading", { name: "账户" });
+    fireEvent.change(screen.getByLabelText("当前密码"), {
+      target: { value: currentPassword }
+    });
+    fireEvent.change(screen.getByLabelText("新密码"), {
+      target: { value: newPassword }
+    });
+    fireEvent.change(screen.getByLabelText("确认新密码"), {
+      target: { value: newPassword }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("密码已更新");
+    expect(fetchImpl).toHaveBeenCalledWith("/api/v1/auth/password/change", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+  });
+
+  it("expires the session when changing the password receives 401", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    fetchImpl.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/auth/session")) {
+        return sessionResponse("USER");
+      }
+      if (url.endsWith("/auth/password/change")) {
+        return authenticationFailure();
+      }
+      return healthResponse();
+    });
+
+    render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
+
+    await screen.findByRole("heading", { name: "账户" });
+    const newPassword = makePassword();
+    fireEvent.change(screen.getByLabelText("当前密码"), {
+      target: { value: makePassword() }
+    });
+    fireEvent.change(screen.getByLabelText("新密码"), {
+      target: { value: newPassword }
+    });
+    fireEvent.change(screen.getByLabelText("确认新密码"), {
+      target: { value: newPassword }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
+
+    expect(
+      await screen.findByText("会话已失效，请重新登录")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
+  });
+
+  it("keeps the session when the current password is rejected", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    fetchImpl.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/auth/session")) {
+        return sessionResponse("USER");
+      }
+      if (url.endsWith("/auth/password/change")) {
+        return new Response(
+          JSON.stringify({
+            code: "INVALID_CREDENTIALS",
+            message: "当前密码不正确"
+          }),
+          { status: 401, headers: { "content-type": "application/json" } }
+        );
+      }
+      return healthResponse();
+    });
+
+    render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
+
+    await screen.findByRole("heading", { name: "账户" });
+    const newPassword = makePassword();
+    fireEvent.change(screen.getByLabelText("当前密码"), {
+      target: { value: makePassword() }
+    });
+    fireEvent.change(screen.getByLabelText("新密码"), {
+      target: { value: newPassword }
+    });
+    fireEvent.change(screen.getByLabelText("确认新密码"), {
+      target: { value: newPassword }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
+
+    expect(
+      await screen.findByText("修改密码失败，请稍后重试")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "账户" })).toBeInTheDocument();
+    expect(
+      screen.queryByText("会话已失效，请重新登录")
+    ).not.toBeInTheDocument();
+  });
+
   it("clears the user after logout", async () => {
     const fetchImpl = vi.fn<typeof fetch>();
     fetchImpl.mockImplementation(async (input) => {
@@ -306,6 +424,30 @@ describe("App", () => {
     expect(
       await within(adminUsersView).findByText(user.username)
     ).toBeInTheDocument();
+  });
+
+  it("expires the session when loading user management receives 401", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    fetchImpl.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/auth/session")) {
+        return sessionResponse("ADMIN");
+      }
+      if (url.endsWith("/v1/users")) {
+        return authenticationFailure();
+      }
+      return healthResponse();
+    });
+
+    render(<App apiBaseUrl="/api" environment="test" fetchImpl={fetchImpl} />);
+
+    expect(
+      await screen.findByText("会话已失效，请重新登录")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "用户管理" })
+    ).not.toBeInTheDocument();
   });
 
   it.each(["USER", "LEADER"] as const)(

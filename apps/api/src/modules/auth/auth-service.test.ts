@@ -387,12 +387,31 @@ describe("AuthService login and authenticate", () => {
       await store.update((state) => {
         state.users.push(administrator);
       });
-      const userService = new UserService(store);
+      const userService = new UserService(store, {
+        now: () => new Date(currentTime)
+      });
       const administratorPrincipal = {
         userId: administrator.id,
         sessionId: randomUUID(),
         role: "ADMIN" as const
       };
+      await store.update((state) => {
+        state.sessions.push({
+          id: administratorPrincipal.sessionId,
+          userId: administrator.id,
+          tokenDigest: digestOpaqueSecret(generateOpaqueSecret()),
+          deviceId: randomUUID(),
+          platform: "WEB",
+          deviceName: "Administrator browser",
+          createdAt: currentTime.toISOString(),
+          lastSeenAt: currentTime.toISOString(),
+          expiresAt: new Date(
+            currentTime.getTime() + 30 * 60 * 1_000
+          ).toISOString(),
+          revokedAt: null,
+          revocationReason: null
+        });
+      });
 
       if (command === "disable") {
         await userService.disableUser(administratorPrincipal, user.id);

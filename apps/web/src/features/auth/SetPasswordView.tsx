@@ -38,17 +38,22 @@ export function SetPasswordView({
 
     setIsSubmitting(true);
     setError("");
+    let succeeded = false;
 
     try {
       await onSubmit(ticket, password);
-      setTicket("");
-      setPassword("");
-      setConfirmation("");
-      onSuccess();
+      succeeded = true;
     } catch {
       setError("设置密码失败，请稍后重试");
     } finally {
+      setTicket("");
+      setPassword("");
+      setConfirmation("");
       setIsSubmitting(false);
+    }
+
+    if (succeeded) {
+      onSuccess();
     }
   }
 

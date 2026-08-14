@@ -51,6 +51,12 @@ class CountingAuthStateStore implements AuthStateStore {
     return this.store.update(mutator);
   }
 
+  seedSession(session: StoredSession): Promise<void> {
+    return this.store.update((state) => {
+      state.sessions.push(session);
+    });
+  }
+
   resetUpdateCalls(): void {
     this.updateCalls = 0;
   }
@@ -96,18 +102,22 @@ function makePassword(): string {
   return `${generateOpaqueSecret()}${generateOpaqueSecret()}`;
 }
 
-function makeSession(userId: string): StoredSession {
-  const now = new Date().toISOString();
+function makeSession(
+  userId: string,
+  now = new Date(),
+  id: string = randomUUID()
+): StoredSession {
+  const occurredAt = now.toISOString();
   return {
-    id: randomUUID(),
+    id,
     userId,
     tokenDigest: digestOpaqueSecret(generateOpaqueSecret()),
     deviceId: randomUUID(),
     platform: "WEB",
     deviceName: "Test browser",
-    createdAt: now,
-    lastSeenAt: now,
-    expiresAt: new Date(Date.parse(now) + 60_000).toISOString(),
+    createdAt: occurredAt,
+    lastSeenAt: occurredAt,
+    expiresAt: new Date(now.getTime() + 25 * 60 * 60 * 1_000).toISOString(),
     revokedAt: null,
     revocationReason: null
   };
@@ -117,7 +127,7 @@ function principal(
   userId: string,
   role: SystemRole = "ADMIN"
 ): AuthenticatedPrincipal {
-  return { userId, sessionId: randomUUID(), role };
+  return { userId, sessionId: `session-${userId}`, role };
 }
 
 async function expectServiceError(
@@ -149,11 +159,15 @@ describe("UserService", () => {
   });
 
   async function bootstrapAdmin() {
-    return service.bootstrapAdmin({
+    const admin = await service.bootstrapAdmin({
       username: "  First.Admin  ",
       displayName: "Initial administrator",
       password: makePassword()
     });
+    await store.seedSession(
+      makeSession(admin.id, currentTime, principal(admin.id).sessionId)
+    );
+    return admin;
   }
 
   async function createAndActivate(
@@ -169,6 +183,9 @@ describe("UserService", () => {
       ticket: issued.ticket,
       password: makePassword()
     });
+    await store.seedSession(
+      makeSession(activated.id, currentTime, principal(activated.id).sessionId)
+    );
     return activated;
   }
 
@@ -448,6 +465,36 @@ describe("UserService", () => {
     });
   });
 
+  it("rejects invalid credential tickets before hashing passwords", async () => {
+    const hash = vi.fn(testPasswordHasher.hash);
+    service = new UserService(store, {
+      now: () => new Date(currentTime),
+      generateId: makeIdGenerator(),
+      generateSecret: makeSecretGenerator(),
+      digestSecret: digestOpaqueSecret,
+      passwordHasher: { hash, verify: testPasswordHasher.verify }
+    });
+
+    await expectServiceError(
+      service.activate({
+        ticket: generateOpaqueSecret(),
+        password: makePassword()
+      }),
+      "INVALID_TICKET",
+      400
+    );
+    await expectServiceError(
+      service.completePasswordReset({
+        ticket: generateOpaqueSecret(),
+        password: makePassword()
+      }),
+      "INVALID_TICKET",
+      400
+    );
+
+    expect(hash).not.toHaveBeenCalled();
+  });
+
   it("rejects ticket completion that crosses expiry while queued", async () => {
     const admin = await bootstrapAdmin();
     const issued = await service.createUser(principal(admin.id), {
@@ -694,6 +741,45 @@ describe("UserService", () => {
     });
   });
 
+  it("reissues password reset while reset is required and invalidates the old ticket", async () => {
+    const admin = await bootstrapAdmin();
+    const adminPrincipal = principal(admin.id);
+    const user = await createAndActivate(adminPrincipal);
+    const original = await service.issuePasswordReset(adminPrincipal, user.id);
+
+    const replacement = await service.issuePasswordReset(
+      adminPrincipal,
+      user.id
+    );
+
+    const tickets = await store.read((state) =>
+      state.tickets.filter(
+        ({ userId, purpose }) =>
+          userId === user.id && purpose === "PASSWORD_RESET"
+      )
+    );
+    expect(tickets).toHaveLength(2);
+    expect(tickets[0]?.consumedAt).toBe(currentTime.toISOString());
+    expect(tickets[1]).toMatchObject({
+      ticketDigest: digestOpaqueSecret(replacement.ticket),
+      consumedAt: null
+    });
+    await expectServiceError(
+      service.completePasswordReset({
+        ticket: original.ticket,
+        password: makePassword()
+      }),
+      "INVALID_TICKET",
+      400
+    );
+    await expect(
+      service.completePasswordReset({
+        ticket: replacement.ticket,
+        password: makePassword()
+      })
+    ).resolves.toMatchObject({ credentialStatus: "READY" });
+  });
+
   it("rejects expired reset tickets with the same public error", async () => {
     const admin = await bootstrapAdmin();
     const adminPrincipal = principal(admin.id);
@@ -733,8 +819,8 @@ describe("UserService", () => {
     );
     await expectServiceError(
       service.disableUser(principal(randomUUID()), member.id),
-      "FORBIDDEN",
-      403
+      "SESSION_EXPIRED",
+      401
     );
 
     const deniedEvents = await store.read((state) =>
@@ -753,6 +839,69 @@ describe("UserService", () => {
     ]);
   });
 
+  it("revalidates the administrator session inside each management transaction", async () => {
+    const admin = await bootstrapAdmin();
+    const adminPrincipal = principal(admin.id);
+    const member = await createAndActivate(adminPrincipal);
+    await store.update((state) => {
+      const session = state.sessions.find(
+        ({ id }) => id === adminPrincipal.sessionId
+      );
+      if (session) {
+        session.revokedAt = currentTime.toISOString();
+        session.revocationReason = "LOGOUT";
+      }
+    });
+
+    await expectServiceError(
+      service.disableUser(adminPrincipal, member.id),
+      "SESSION_EXPIRED",
+      401
+    );
+    expect(
+      await store.read(
+        (state) => state.users.find(({ id }) => id === member.id)?.accountStatus
+      )
+    ).toBe("ACTIVE");
+  });
+
+  it("rejects expired and wrongly bound administrator sessions", async () => {
+    const admin = await bootstrapAdmin();
+    const adminPrincipal = principal(admin.id);
+    const member = await createAndActivate(adminPrincipal);
+    await store.update((state) => {
+      const session = state.sessions.find(
+        ({ id }) => id === adminPrincipal.sessionId
+      );
+      if (session) {
+        session.expiresAt = currentTime.toISOString();
+      }
+    });
+
+    await expectServiceError(
+      service.listUsers(adminPrincipal),
+      "SESSION_EXPIRED",
+      401
+    );
+
+    await store.update((state) => {
+      const session = state.sessions.find(
+        ({ id }) => id === adminPrincipal.sessionId
+      );
+      if (session) {
+        session.userId = member.id;
+        session.expiresAt = new Date(
+          currentTime.getTime() + 60_000
+        ).toISOString();
+      }
+    });
+    await expectServiceError(
+      service.issuePasswordReset(adminPrincipal, member.id),
+      "SESSION_EXPIRED",
+      401
+    );
+  });
+
   it("keeps a known disabled administrator ID in denied audit events", async () => {
     const admin = await bootstrapAdmin();
     const adminPrincipal = principal(admin.id);
@@ -761,8 +910,8 @@ describe("UserService", () => {
 
     await expectServiceError(
       service.listUsers(adminPrincipal),
-      "FORBIDDEN",
-      403
+      "SESSION_EXPIRED",
+      401
     );
 
     expect(await store.read((state) => state.auditEvents.at(-1))).toMatchObject(

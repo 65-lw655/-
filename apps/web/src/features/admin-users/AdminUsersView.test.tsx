@@ -60,9 +60,13 @@ function noContent(): Response {
   return new Response(null, { status: 204 });
 }
 
-function renderView(fetchImpl: typeof fetch) {
+function renderView(fetchImpl: typeof fetch, onSessionExpired = vi.fn()) {
   return render(
-    <AdminUsersView apiBaseUrl={API_BASE_URL} fetchImpl={fetchImpl} />
+    <AdminUsersView
+      apiBaseUrl={API_BASE_URL}
+      fetchImpl={fetchImpl}
+      onSessionExpired={onSessionExpired}
+    />
   );
 }
 
@@ -410,6 +414,36 @@ describe("AdminUsersView", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "您没有管理用户的权限"
     );
+  });
+
+  it("notifies the parent when loading users receives 401", async () => {
+    const onSessionExpired = vi.fn();
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(apiError("SESSION_EXPIRED", "会话已失效", 401));
+
+    renderView(fetchImpl, onSessionExpired);
+
+    await waitFor(() => expect(onSessionExpired).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("notifies the parent when a user command receives 401", async () => {
+    const user = createUser();
+    const onSessionExpired = vi.fn();
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse([user]))
+      .mockResolvedValueOnce(apiError("SESSION_EXPIRED", "会话已失效", 401));
+
+    renderView(fetchImpl, onSessionExpired);
+    await screen.findByText(user.displayName);
+    openActions(user);
+    fireEvent.click(screen.getByRole("menuitem", { name: "停用" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认停用" }));
+
+    await waitFor(() => expect(onSessionExpired).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("explains that the last active administrator must remain available", async () => {

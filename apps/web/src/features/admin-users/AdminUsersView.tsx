@@ -20,6 +20,7 @@ type Confirmation =
 export interface AdminUsersViewProps {
   apiBaseUrl: string;
   fetchImpl?: typeof fetch;
+  onSessionExpired(): void;
 }
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -71,7 +72,11 @@ function confirmationCopy(confirmation: Confirmation): {
   }
 }
 
-export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
+export function AdminUsersView({
+  apiBaseUrl,
+  fetchImpl,
+  onSessionExpired
+}: AdminUsersViewProps) {
   const client = useMemo(
     () => createAdminUsersClient(apiBaseUrl, fetchImpl),
     [apiBaseUrl, fetchImpl]
@@ -86,17 +91,32 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [credential, setCredential] = useState<CredentialDisplay | null>(null);
 
+  const handleRequestError = useCallback(
+    (requestError: unknown) => {
+      if (
+        requestError instanceof ApiClientError &&
+        requestError.status === 401
+      ) {
+        setError(null);
+        onSessionExpired();
+        return;
+      }
+      setError(errorMessage(requestError));
+    },
+    [onSessionExpired]
+  );
+
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       setUsers(await client.listUsers());
     } catch (loadError) {
-      setError(errorMessage(loadError));
+      handleRequestError(loadError);
     } finally {
       setLoading(false);
     }
-  }, [client]);
+  }, [client, handleRequestError]);
 
   useEffect(() => {
     let active = true;
@@ -110,7 +130,7 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
       })
       .catch((loadError) => {
         if (active) {
-          setError(errorMessage(loadError));
+          handleRequestError(loadError);
         }
       })
       .finally(() => {
@@ -122,7 +142,7 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
     return () => {
       active = false;
     };
-  }, [client]);
+  }, [client, handleRequestError]);
 
   async function showIssuedCredential(
     issue: () => Promise<{ ticket: string }>,
@@ -134,7 +154,7 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
       setCredential({ title, ticket: issued.ticket });
       await loadUsers();
     } catch (commandError) {
-      setError(errorMessage(commandError));
+      handleRequestError(commandError);
     }
   }
 
@@ -185,7 +205,7 @@ export function AdminUsersView({ apiBaseUrl, fetchImpl }: AdminUsersViewProps) {
       }
       await loadUsers();
     } catch (commandError) {
-      setError(errorMessage(commandError));
+      handleRequestError(commandError);
     }
   }
 

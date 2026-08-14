@@ -62,7 +62,8 @@ export type UserServiceErrorCode =
   | "INVALID_TICKET"
   | "INVALID_ACCOUNT_STATE"
   | "LAST_ADMIN_REQUIRED"
-  | "SELF_PASSWORD_RESET_NOT_ALLOWED";
+  | "SELF_PASSWORD_RESET_NOT_ALLOWED"
+  | "SESSION_EXPIRED";
 
 const ERROR_DEFINITIONS: Record<
   UserServiceErrorCode,
@@ -88,6 +89,10 @@ const ERROR_DEFINITIONS: Record<
   SELF_PASSWORD_RESET_NOT_ALLOWED: {
     message: "Self password reset is not allowed",
     statusCode: 409
+  },
+  SESSION_EXPIRED: {
+    message: "Session has expired",
+    statusCode: 401
   }
 };
 
@@ -190,6 +195,20 @@ function findActor(
   return state.users.find(({ id }) => id === principal.userId);
 }
 
+function hasValidSession(
+  state: AuthState,
+  principal: AuthenticatedPrincipal,
+  now: string
+): boolean {
+  const session = state.sessions.find(({ id }) => id === principal.sessionId);
+  return (
+    session !== undefined &&
+    session.userId === principal.userId &&
+    session.revokedAt === null &&
+    Date.parse(session.expiresAt) > Date.parse(now)
+  );
+}
+
 function revokeSessions(
   state: AuthState,
   userId: string,
@@ -279,7 +298,18 @@ export class UserService {
         const now = this.now();
         const expiresAt = this.expiresAt(now, ACTIVATION_TTL_MS);
         const actor = findActor(state, principal);
-        if (actor === undefined || !isEffectiveAdmin(actor)) {
+        if (actor === undefined || !hasValidSession(state, principal, now)) {
+          this.audit(
+            state,
+            "USER_CREATED",
+            "DENIED",
+            actor?.id ?? null,
+            null,
+            now
+          );
+          return fail("SESSION_EXPIRED");
+        }
+        if (!isEffectiveAdmin(actor)) {
           this.audit(
             state,
             "USER_CREATED",
@@ -336,15 +366,12 @@ export class UserService {
       }
       throw error;
     }
-    const passwordHash = await this.dependencies.passwordHasher.hash(
-      input.password
-    );
     return this.completeTicket(
       input.ticket,
       "ACTIVATION",
       "PENDING_ACTIVATION",
       "USER_ACTIVATED",
-      passwordHash
+      input.password
     );
   }
 
@@ -360,7 +387,18 @@ export class UserService {
         const now = this.now();
         const expiresAt = this.expiresAt(now, ACTIVATION_TTL_MS);
         const actor = findActor(state, principal);
-        if (actor === undefined || !isEffectiveAdmin(actor)) {
+        if (actor === undefined || !hasValidSession(state, principal, now)) {
+          this.audit(
+            state,
+            "ACTIVATION_REISSUED",
+            "DENIED",
+            actor?.id ?? null,
+            null,
+            now
+          );
+          return fail("SESSION_EXPIRED");
+        }
+        if (!isEffectiveAdmin(actor)) {
           this.audit(
             state,
             "ACTIVATION_REISSUED",
@@ -509,7 +547,18 @@ export class UserService {
         const now = this.now();
         const expiresAt = this.expiresAt(now, PASSWORD_RESET_TTL_MS);
         const actor = findActor(state, principal);
-        if (actor === undefined || !isEffectiveAdmin(actor)) {
+        if (actor === undefined || !hasValidSession(state, principal, now)) {
+          this.audit(
+            state,
+            "PASSWORD_RESET_ISSUED",
+            "DENIED",
+            actor?.id ?? null,
+            null,
+            now
+          );
+          return fail("SESSION_EXPIRED");
+        }
+        if (!isEffectiveAdmin(actor)) {
           this.audit(
             state,
             "PASSWORD_RESET_ISSUED",
@@ -545,7 +594,8 @@ export class UserService {
         }
         if (
           user.accountStatus !== "ACTIVE" ||
-          user.credentialStatus !== "READY"
+          (user.credentialStatus !== "READY" &&
+            user.credentialStatus !== "RESET_REQUIRED")
         ) {
           this.audit(
             state,
@@ -613,23 +663,31 @@ export class UserService {
       }
       throw error;
     }
-    const passwordHash = await this.dependencies.passwordHasher.hash(
-      input.password
-    );
     return this.completeTicket(
       input.ticket,
       "PASSWORD_RESET",
       "RESET_REQUIRED",
       "PASSWORD_RESET_COMPLETED",
-      passwordHash
+      input.password
     );
   }
 
   async listUsers(principal: AuthenticatedPrincipal): Promise<PublicUser[]> {
-    const now = this.now();
     const result = await this.store.update<Result<PublicUser[]>>((state) => {
+      const now = this.now();
       const actor = findActor(state, principal);
-      if (actor === undefined || !isEffectiveAdmin(actor)) {
+      if (actor === undefined || !hasValidSession(state, principal, now)) {
+        this.audit(
+          state,
+          "AUTHORIZATION_DENIED",
+          "DENIED",
+          actor?.id ?? null,
+          null,
+          now
+        );
+        return fail("SESSION_EXPIRED");
+      }
+      if (!isEffectiveAdmin(actor)) {
         this.audit(
           state,
           "AUTHORIZATION_DENIED",
@@ -650,40 +708,44 @@ export class UserService {
     purpose: "ACTIVATION" | "PASSWORD_RESET",
     expectedCredentialStatus: "PENDING_ACTIVATION" | "RESET_REQUIRED",
     event: "USER_ACTIVATED" | "PASSWORD_RESET_COMPLETED",
-    passwordHash: string
+    password: string
   ): Promise<PublicUser> {
     const ticketDigest = this.dependencies.digestSecret(plaintextTicket);
-    const result = await this.store.update<Result<PublicUser>>((state) => {
-      const now = this.now();
-      const ticket = state.tickets.find(
-        (candidate) =>
-          candidate.purpose === purpose &&
-          candidate.ticketDigest === ticketDigest
-      );
-      const user =
-        ticket === undefined
-          ? undefined
-          : state.users.find(({ id }) => id === ticket.userId);
-      const valid =
-        ticket !== undefined &&
-        ticket.consumedAt === null &&
-        Date.parse(ticket.expiresAt) > Date.parse(now) &&
-        user !== undefined &&
-        user.accountStatus === "ACTIVE" &&
-        user.credentialStatus === expectedCredentialStatus;
+    const result = await this.store.update<Result<PublicUser>>(
+      async (state) => {
+        const now = this.now();
+        const ticket = state.tickets.find(
+          (candidate) =>
+            candidate.purpose === purpose &&
+            candidate.ticketDigest === ticketDigest
+        );
+        const user =
+          ticket === undefined
+            ? undefined
+            : state.users.find(({ id }) => id === ticket.userId);
+        const valid =
+          ticket !== undefined &&
+          ticket.consumedAt === null &&
+          Date.parse(ticket.expiresAt) > Date.parse(now) &&
+          user !== undefined &&
+          user.accountStatus === "ACTIVE" &&
+          user.credentialStatus === expectedCredentialStatus;
 
-      if (!valid || ticket === undefined || user === undefined) {
-        this.audit(state, event, "DENIED", null, user?.id ?? null, now);
-        return fail("INVALID_TICKET");
+        if (!valid || ticket === undefined || user === undefined) {
+          this.audit(state, event, "DENIED", null, user?.id ?? null, now);
+          return fail("INVALID_TICKET");
+        }
+
+        const passwordHash =
+          await this.dependencies.passwordHasher.hash(password);
+        ticket.consumedAt = now;
+        user.passwordHash = passwordHash;
+        user.credentialStatus = "READY";
+        user.updatedAt = now;
+        this.audit(state, event, "SUCCEEDED", null, user.id, now);
+        return succeed(toPublicUser(user));
       }
-
-      ticket.consumedAt = now;
-      user.passwordHash = passwordHash;
-      user.credentialStatus = "READY";
-      user.updatedAt = now;
-      this.audit(state, event, "SUCCEEDED", null, user.id, now);
-      return succeed(toPublicUser(user));
-    });
+    );
     return unwrap(result);
   }
 
@@ -692,11 +754,15 @@ export class UserService {
     code: UserServiceErrorCode,
     principal?: AuthenticatedPrincipal
   ): Promise<never> {
-    const now = this.now();
     const result = await this.store.update<Result<never>>((state) => {
+      const now = this.now();
       if (principal !== undefined) {
         const actor = findActor(state, principal);
-        if (actor === undefined || !isEffectiveAdmin(actor)) {
+        if (actor === undefined || !hasValidSession(state, principal, now)) {
+          this.audit(state, event, "DENIED", actor?.id ?? null, null, now);
+          return fail("SESSION_EXPIRED");
+        }
+        if (!isEffectiveAdmin(actor)) {
           this.audit(state, event, "DENIED", actor?.id ?? null, null, now);
           return fail("FORBIDDEN");
         }
@@ -720,10 +786,14 @@ export class UserService {
       now: string
     ) => UserServiceErrorCode | void
   ): Promise<PublicUser> {
-    const now = this.now();
     const result = await this.store.update<Result<PublicUser>>((state) => {
+      const now = this.now();
       const actor = findActor(state, principal);
-      if (actor === undefined || !isEffectiveAdmin(actor)) {
+      if (actor === undefined || !hasValidSession(state, principal, now)) {
+        this.audit(state, event, "DENIED", actor?.id ?? null, null, now);
+        return fail("SESSION_EXPIRED");
+      }
+      if (!isEffectiveAdmin(actor)) {
         this.audit(state, event, "DENIED", actor?.id ?? null, null, now);
         return fail("FORBIDDEN");
       }

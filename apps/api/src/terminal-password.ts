@@ -1,3 +1,5 @@
+import { StringDecoder } from "node:string_decoder";
+
 export async function readHiddenPassword(
   label: string,
   input: NodeJS.ReadStream = process.stdin,
@@ -10,6 +12,7 @@ export async function readHiddenPassword(
   const initialRawMode = input.isRaw ?? false;
   let rawModeChanged = false;
   let password = "";
+  const decoder = new StringDecoder("utf8");
   output.write(label);
 
   let onData: ((chunk: Buffer | string) => void) | undefined;
@@ -35,7 +38,9 @@ export async function readHiddenPassword(
       };
 
       onData = (chunk) => {
-        for (const character of Array.from(chunk.toString())) {
+        const decoded =
+          typeof chunk === "string" ? chunk : decoder.write(chunk);
+        for (const character of Array.from(decoded)) {
           if (character === "\r" || character === "\n") {
             finish();
             return;

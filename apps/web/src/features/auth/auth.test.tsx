@@ -12,6 +12,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiClientError } from "../../api-client.js";
+import { AccountView } from "./AccountView.js";
 import { createAuthClient } from "./auth-client.js";
 import { LoginView } from "./LoginView.js";
 import { SetPasswordView } from "./SetPasswordView.js";
@@ -237,12 +238,14 @@ describe("LoginView", () => {
     fireEvent.change(screen.getByLabelText("用户名"), {
       target: { value: "member" }
     });
-    fireEvent.change(screen.getByLabelText("密码"), {
+    const password = screen.getByLabelText("密码");
+    fireEvent.change(password, {
       target: { value: makePassword() }
     });
     fireEvent.click(screen.getByRole("button", { name: "登录" }));
 
     expect(await screen.findByText("登录失败，请稍后重试")).toBeInTheDocument();
+    expect(password).toHaveValue("");
   });
 
   it("notifies the parent after a successful login", async () => {
@@ -255,12 +258,14 @@ describe("LoginView", () => {
     fireEvent.change(screen.getByLabelText("用户名"), {
       target: { value: "member" }
     });
-    fireEvent.change(screen.getByLabelText("密码"), {
+    const password = screen.getByLabelText("密码");
+    fireEvent.change(password, {
       target: { value: makePassword() }
     });
     fireEvent.click(screen.getByRole("button", { name: "登录" }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
+    expect(password).toHaveValue("");
   });
 });
 
@@ -308,6 +313,9 @@ describe("SetPasswordView", () => {
     fireEvent.click(screen.getByRole("button", { name: "设置密码" }));
 
     expect(screen.getByText("密码至少需要 12 个字符")).toBeInTheDocument();
+    expect(screen.getByLabelText("一次性码")).not.toHaveValue("");
+    expect(screen.getByLabelText("新密码")).not.toHaveValue("");
+    expect(screen.getByLabelText("确认新密码")).not.toHaveValue("");
   });
 
   it("rejects different password entries", () => {
@@ -327,6 +335,9 @@ describe("SetPasswordView", () => {
     fireEvent.click(screen.getByRole("button", { name: "设置密码" }));
 
     expect(screen.getByText("两次输入的密码不一致")).toBeInTheDocument();
+    expect(screen.getByLabelText("一次性码")).not.toHaveValue("");
+    expect(screen.getByLabelText("新密码")).not.toHaveValue("");
+    expect(screen.getByLabelText("确认新密码")).not.toHaveValue("");
   });
 
   it("clears the one-time code and passwords after a successful submission", async () => {
@@ -356,6 +367,105 @@ describe("SetPasswordView", () => {
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
     expect(screen.getByLabelText("一次性码")).toHaveValue("");
+    expect(screen.getByLabelText("新密码")).toHaveValue("");
+    expect(screen.getByLabelText("确认新密码")).toHaveValue("");
+  });
+
+  it("clears the one-time code and passwords after a failed submission", async () => {
+    const newPassword = makePassword();
+
+    render(
+      <SetPasswordView
+        mode="reset"
+        onSubmit={() => Promise.reject(new Error("request failed"))}
+        onSuccess={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("一次性码"), {
+      target: { value: makeOpaqueValue() }
+    });
+    fireEvent.change(screen.getByLabelText("新密码"), {
+      target: { value: newPassword }
+    });
+    fireEvent.change(screen.getByLabelText("确认新密码"), {
+      target: { value: newPassword }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "设置密码" }));
+
+    expect(
+      await screen.findByText("设置密码失败，请稍后重试")
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("一次性码")).toHaveValue("");
+    expect(screen.getByLabelText("新密码")).toHaveValue("");
+    expect(screen.getByLabelText("确认新密码")).toHaveValue("");
+  });
+});
+
+describe("AccountView", () => {
+  it("changes the password and clears sensitive inputs after success", async () => {
+    const currentPassword = makePassword();
+    const newPassword = makePassword();
+    const onChangePassword = vi.fn(() => Promise.resolve());
+
+    render(
+      <AccountView
+        user={{ userId: crypto.randomUUID(), role: "USER" }}
+        onChangePassword={onChangePassword}
+        onLogout={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("当前密码"), {
+      target: { value: currentPassword }
+    });
+    fireEvent.change(screen.getByLabelText("新密码"), {
+      target: { value: newPassword }
+    });
+    fireEvent.change(screen.getByLabelText("确认新密码"), {
+      target: { value: newPassword }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
+
+    await waitFor(() =>
+      expect(onChangePassword).toHaveBeenCalledWith(
+        currentPassword,
+        newPassword
+      )
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent("密码已更新");
+    expect(screen.getByLabelText("当前密码")).toHaveValue("");
+    expect(screen.getByLabelText("新密码")).toHaveValue("");
+    expect(screen.getByLabelText("确认新密码")).toHaveValue("");
+  });
+
+  it("clears sensitive inputs after a failed password change", async () => {
+    const currentPassword = makePassword();
+    const newPassword = makePassword();
+
+    render(
+      <AccountView
+        user={{ userId: crypto.randomUUID(), role: "USER" }}
+        onChangePassword={() => Promise.reject(new Error("Rejected"))}
+        onLogout={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("当前密码"), {
+      target: { value: currentPassword }
+    });
+    fireEvent.change(screen.getByLabelText("新密码"), {
+      target: { value: newPassword }
+    });
+    fireEvent.change(screen.getByLabelText("确认新密码"), {
+      target: { value: newPassword }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
+
+    expect(
+      await screen.findByText("修改密码失败，请稍后重试")
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("当前密码")).toHaveValue("");
     expect(screen.getByLabelText("新密码")).toHaveValue("");
     expect(screen.getByLabelText("确认新密码")).toHaveValue("");
   });
