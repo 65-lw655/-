@@ -2,7 +2,7 @@
 
 面向企业内部项目经营管理的线上系统。系统同时提供浏览器、macOS 桌面端和 Windows 桌面端，支持多人按权限访问项目，并允许桌面端在断网时继续编辑、恢复网络后自动同步。
 
-> 当前状态：M2 的账号身份、基础授权规则和 Web 用户管理已通过自动化与浏览器验收。项目数据范围、项目业务、生产存储、多实例支持和桌面凭证仍未实现。
+> 当前状态：M2 账号与权限闭环已完成；M3 项目、成员、审计、PostgreSQL 仓储和 Web 纵向切片已完成代码与非数据库自动化验证。PostgreSQL 运行验收及基于虚构数据的桌面/窄屏浏览器角色验收仍需在具备隔离 PostgreSQL 的环境执行。
 
 ## 一、建设目标
 
@@ -271,6 +271,7 @@ flowchart TB
 
 - Node.js 22.12 或更高的 22.x 版本
 - npm 10
+- Docker 与 Docker Compose（用于本机独立 PostgreSQL 16）
 
 仓库只使用 npm，依赖版本由根目录 `package-lock.json` 锁定。
 
@@ -281,7 +282,10 @@ macOS 或 Linux：
 ```bash
 cp .env.example .env
 npm ci
-npm run bootstrap-admin --workspace @project-online/api
+docker compose up -d postgres
+export DATABASE_URL="<local-development-database-url>"
+npm run db:migrate
+npm run bootstrap-admin
 npm run dev
 ```
 
@@ -290,13 +294,37 @@ Windows PowerShell：
 ```powershell
 Copy-Item .env.example .env
 npm ci
-npm run bootstrap-admin --workspace @project-online/api
+docker compose up -d postgres
+$env:DATABASE_URL = "<local-development-database-url>"
+npm run db:migrate
+npm run bootstrap-admin
 npm run dev
 ```
 
-`.env` 仅用于本机公开开发配置，已经加入 `.gitignore`。不得在其中提交密码、令牌、密钥或真实生产地址。`AUTH_STORE_PATH` 默认的 `.local-data/auth-store.json` 是被忽略的单机开发数据，不得提交或用于生产。
+复制后必须自行选择本机 PostgreSQL 用户名和密码，并让 `DATABASE_URL` 仅指向本机开发库；占位连接地址不能直接运行，也不得复用测试或生产凭证。`.env` 已加入 `.gitignore`，不得提交密码、令牌、密钥或真实生产地址。`AUTH_STORE_PATH` 默认的 `.local-data/auth-store.json` 是被忽略的单机开发数据，不得提交或用于生产。
+
+`npm run db:migrate` 只在空库中创建 M3 项目、成员、审计和提交序号结构，不插入样例项目，也不读取、转换或迁移旧项目数据。
 
 首次运行时，`bootstrap-admin` 会在本机终端创建首位管理员并由该管理员自行输入密码。管理员开通其他用户或发起密码重置时，只能签发一次性码；所有由管理员开通的用户通过激活码自行设置密码，管理员不能代设或查看密码。
+
+### 虚构 M3 种子
+
+种子命令只接受调用者显式提供的两个已创建虚构 M2 用户 ID：管理员 ID 用作创建者和审计操作者，负责人 ID 成为唯一 `OWNER`。命令不读取 `AuthStateStore`，也不验证或创建 M2 用户；调用者必须先完成这两个虚构用户的创建。
+
+固定示例记录使用保留的 `f1c71000-0000-4000-8000-000000000000` 至 `f1c71000-0000-4000-8000-000000000120` 虚构 UUID 范围，项目名称以 `示例-` 开头。只有确认值严格为 `yes` 时才会执行；重复执行不会新增项目、成员、序号或审计事件。
+
+macOS 或 Linux：
+
+```bash
+SEED_FICTIONAL_DATA=yes npm run db:seed:fictional -- --admin-user-id <admin-user-uuid> --owner-user-id <owner-user-uuid>
+```
+
+Windows PowerShell：
+
+```powershell
+$env:SEED_FICTIONAL_DATA = "yes"
+npm run db:seed:fictional -- --admin-user-id <admin-user-uuid> --owner-user-id <owner-user-uuid>
+```
 
 ### 开发服务
 
@@ -317,17 +345,24 @@ npm run dev
 npm run verify
 ```
 
-该命令依次执行 lint、格式检查、类型检查、测试和全部工作区构建。CI 使用相同的 Node.js 主版本和验证步骤。
+该命令依次执行 lint、格式检查、类型检查、非数据库测试和全部工作区构建。`npm run test:db` 必须使用与开发库分离、允许创建和删除临时 schema 的隔离测试数据库；先将 `TEST_DATABASE_URL` 设为该测试库的占位地址对应本机值，再单独执行：
+
+```bash
+export TEST_DATABASE_URL="<isolated-test-database-url>"
+npm run test:db
+```
+
+CI 使用临时 PostgreSQL 16 服务，在既有验证步骤前执行迁移和 `test:db`，且不会在日志中主动输出数据库地址。
 
 ### 工作区
 
-| 工作区 | M2 职责 |
+| 工作区 | 当前职责 |
 | --- | --- |
-| `packages/domain` | 提供系统版本、账号状态、角色和纯授权规则 |
+| `packages/domain` | 提供系统版本、账号状态、角色、项目模型与纯业务规则 |
 | `packages/ui` | 共享 UI 包边界，尚无组件库 |
 | `packages/sync` | 同步包边界，尚无同步实现 |
-| `apps/api` | Fastify 健康检查、账号、会话、用户管理和本机文件状态适配 |
-| `apps/web` | React 登录、激活、改密、会话恢复和管理员用户管理 |
+| `apps/api` | Fastify 健康检查、账号、会话、用户管理及 PostgreSQL 项目业务 API |
+| `apps/web` | React 登录、账号管理、项目列表、详情、编辑、成员与审计界面 |
 | `apps/desktop` | 桌面包边界，尚未接入 Tauri |
 
-M2 不连接数据库，不包含项目业务、离线编辑、文件上传、多实例生产存储或桌面安装包。
+M2 身份数据仍使用本机文件仓储；M3 仅将项目业务保存到 PostgreSQL。当前仍不包含旧数据迁移、离线编辑、文件上传、多实例生产存储或桌面安装包。

@@ -6,6 +6,7 @@ export interface ApiConfig {
   environment: AppEnvironment;
   webOrigin: string;
   authStorePath: string;
+  databaseUrl?: string;
 }
 
 const APP_ENVIRONMENTS = new Set<AppEnvironment>([
@@ -52,11 +53,14 @@ export function parseApiConfig(
     throw new Error("AUTH_STORE_PATH must not be empty");
   }
 
+  const databaseUrl = env.DATABASE_URL?.trim() ?? "";
+
   return {
     host: env.API_HOST?.trim() || "127.0.0.1",
     port,
     environment,
     webOrigin,
-    authStorePath
+    authStorePath,
+    databaseUrl
   };
 }

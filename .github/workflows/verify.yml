@@ -10,6 +10,23 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: project_online_test
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: project_online_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U project_online_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://project_online_test:test-only-password@127.0.0.1:5432/project_online_test
+      TEST_DATABASE_URL: postgresql://project_online_test:test-only-password@127.0.0.1:5432/project_online_test
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -22,6 +39,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Apply database migrations
+        run: npm run db:migrate
+
+      - name: Test PostgreSQL integration
+        run: npm run test:db
 
       - name: Lint
         run: npm run lint

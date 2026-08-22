@@ -1,12 +1,13 @@
 import { createHmac, randomUUID } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { buildApp } from "../../app.js";
 import type { ApiConfig } from "../../config.js";
 import { MemoryAuthStateStore } from "../../storage/memory-auth-state-store.js";
 import { AuthService } from "../auth/auth-service.js";
 import type { PasswordHasher } from "../auth/password.js";
+import type { ApiServices } from "../auth/routes.js";
 import { UserService, type AuthenticatedPrincipal } from "./user-service.js";
 
 function runtimePassword(): string {
@@ -20,6 +21,31 @@ function createHasher(): PasswordHasher {
   return {
     hash: async (password) => encode(password),
     verify: async (password, encoded) => encode(password) === encoded
+  };
+}
+
+function createProjectServiceStubs(): Pick<
+  ApiServices,
+  "projectService" | "memberService"
+> {
+  return {
+    projectService: {
+      listProjects: vi.fn<ApiServices["projectService"]["listProjects"]>(),
+      createProject: vi.fn<ApiServices["projectService"]["createProject"]>(),
+      getProject: vi.fn<ApiServices["projectService"]["getProject"]>(),
+      updateProject: vi.fn<ApiServices["projectService"]["updateProject"]>(),
+      archiveProject: vi.fn<ApiServices["projectService"]["archiveProject"]>(),
+      restoreProject: vi.fn<ApiServices["projectService"]["restoreProject"]>(),
+      listAuditEvents: vi.fn<ApiServices["projectService"]["listAuditEvents"]>()
+    },
+    memberService: {
+      listMembers: vi.fn<ApiServices["memberService"]["listMembers"]>(),
+      searchCandidates:
+        vi.fn<ApiServices["memberService"]["searchCandidates"]>(),
+      addMember: vi.fn<ApiServices["memberService"]["addMember"]>(),
+      updateMember: vi.fn<ApiServices["memberService"]["updateMember"]>(),
+      removeMember: vi.fn<ApiServices["memberService"]["removeMember"]>()
+    }
   };
 }
 
@@ -40,7 +66,11 @@ async function createHarness() {
     authStorePath: ".local-data/auth-store.json"
   };
   return {
-    app: buildApp(config, { authService, userService }),
+    app: buildApp(config, {
+      authService,
+      userService,
+      ...createProjectServiceStubs()
+    }),
     authService,
     config,
     userService

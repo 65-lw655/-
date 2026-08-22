@@ -1,12 +1,38 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import type { ApiConfig } from "../../config.js";
+import type { MemberService } from "../projects/member-service.js";
+import { ProjectServiceError } from "../projects/project-service-error.js";
+import type { ProjectService } from "../projects/project-service.js";
 import { ServiceError, type UserService } from "../users/user-service.js";
 import { AuthServiceError, type AuthService } from "./auth-service.js";
+
+export type ProjectApiService = Pick<
+  ProjectService,
+  | "listProjects"
+  | "createProject"
+  | "getProject"
+  | "updateProject"
+  | "archiveProject"
+  | "restoreProject"
+  | "listAuditEvents"
+>;
+
+export type MemberApiService = Pick<
+  MemberService,
+  | "listMembers"
+  | "searchCandidates"
+  | "addMember"
+  | "updateMember"
+  | "removeMember"
+>;
 
 export interface ApiServices {
   authService: AuthService;
   userService: UserService;
+  projectService: ProjectApiService;
+  memberService: MemberApiService;
+  close?: () => Promise<void>;
 }
 
 export class ApiError extends Error {
@@ -87,6 +113,20 @@ export function sendApiError(error: unknown, reply: FastifyReply): void {
     reply
       .code(error.statusCode)
       .send({ code: error.code, message: error.message });
+    return;
+  }
+  if (error instanceof ProjectServiceError) {
+    const statusCode = {
+      VALIDATION_ERROR: 400,
+      FORBIDDEN: 403,
+      PROJECT_NOT_FOUND: 404,
+      MEMBER_NOT_FOUND: 404,
+      MEMBER_ALREADY_EXISTS: 409,
+      LAST_OWNER_REQUIRED: 409,
+      INVALID_PROJECT_STATE: 409,
+      USER_NOT_AVAILABLE: 409
+    }[error.code];
+    reply.code(statusCode).send({ code: error.code, message: error.message });
     return;
   }
   throw error;

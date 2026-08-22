@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseApiConfig } from "./config.js";
+import { createDatabasePool } from "./database/pool.js";
 
 describe("parseApiConfig", () => {
   it("uses safe development defaults", () => {
@@ -9,7 +10,8 @@ describe("parseApiConfig", () => {
       port: 3000,
       environment: "development",
       webOrigin: "http://127.0.0.1:5173",
-      authStorePath: ".local-data/auth-store.json"
+      authStorePath: ".local-data/auth-store.json",
+      databaseUrl: ""
     });
   });
 
@@ -20,14 +22,16 @@ describe("parseApiConfig", () => {
         API_PORT: "4100",
         APP_ENV: "production",
         WEB_ORIGIN: "https://projects.example.com",
-        AUTH_STORE_PATH: "runtime/auth.json"
+        AUTH_STORE_PATH: "runtime/auth.json",
+        DATABASE_URL: "runtime-database-value"
       })
     ).toEqual({
       host: "0.0.0.0",
       port: 4100,
       environment: "production",
       webOrigin: "https://projects.example.com",
-      authStorePath: "runtime/auth.json"
+      authStorePath: "runtime/auth.json",
+      databaseUrl: "runtime-database-value"
     });
   });
 
@@ -65,6 +69,18 @@ describe("parseApiConfig", () => {
   it("rejects an empty AUTH_STORE_PATH", () => {
     expect(() => parseApiConfig({ AUTH_STORE_PATH: "   " })).toThrow(
       "AUTH_STORE_PATH must not be empty"
+    );
+  });
+
+  it("keeps a blank DATABASE_URL inert during configuration parsing", () => {
+    expect(parseApiConfig({ DATABASE_URL: "   " }).databaseUrl).toBe("");
+  });
+});
+
+describe("createDatabasePool", () => {
+  it("rejects an empty database URL before creating a pool", () => {
+    expect(() => createDatabasePool("   ")).toThrow(
+      "DATABASE_URL must not be empty"
     );
   });
 });

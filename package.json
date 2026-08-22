@@ -18,12 +18,15 @@
   "scripts": {
     "dev": "npm run build --workspace @project-online/domain && concurrently -n api,web -c cyan,green \"npm run dev --workspace @project-online/api\" \"npm run dev --workspace @project-online/web\"",
     "bootstrap-admin": "npm run bootstrap-admin --workspace @project-online/api",
+    "db:migrate": "npm run db:migrate --workspace @project-online/api",
+    "db:seed:fictional": "npm run db:seed:fictional --workspace @project-online/api --",
     "lint": "eslint . --max-warnings=0",
     "format:check": "prettier --check .",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest",
+    "test:db": "vitest --config vitest.integration.config.ts --run",
     "build": "npm run build --workspaces --if-present",
-    "verify": "npm run lint && npm run format:check && npm run typecheck && npm run test -- --run && npm run build"
+    "verify": "npm run lint && npm run format:check && npm run typecheck && npm run test -- --run && npm run build && npm run smoke:artifact --workspace @project-online/api"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

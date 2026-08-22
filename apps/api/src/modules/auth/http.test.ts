@@ -1,6 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { buildApp } from "../../app.js";
 import type { ApiConfig } from "../../config.js";
@@ -8,6 +8,7 @@ import { MemoryAuthStateStore } from "../../storage/memory-auth-state-store.js";
 import { UserService } from "../users/user-service.js";
 import { AuthService } from "./auth-service.js";
 import type { PasswordHasher } from "./password.js";
+import type { ApiServices } from "./routes.js";
 
 function runtimePassword(): string {
   return `${randomUUID()}Aa1!`;
@@ -20,6 +21,31 @@ function createHasher(): PasswordHasher {
   return {
     hash: async (password) => encode(password),
     verify: async (password, encoded) => encode(password) === encoded
+  };
+}
+
+function createProjectServiceStubs(): Pick<
+  ApiServices,
+  "projectService" | "memberService"
+> {
+  return {
+    projectService: {
+      listProjects: vi.fn<ApiServices["projectService"]["listProjects"]>(),
+      createProject: vi.fn<ApiServices["projectService"]["createProject"]>(),
+      getProject: vi.fn<ApiServices["projectService"]["getProject"]>(),
+      updateProject: vi.fn<ApiServices["projectService"]["updateProject"]>(),
+      archiveProject: vi.fn<ApiServices["projectService"]["archiveProject"]>(),
+      restoreProject: vi.fn<ApiServices["projectService"]["restoreProject"]>(),
+      listAuditEvents: vi.fn<ApiServices["projectService"]["listAuditEvents"]>()
+    },
+    memberService: {
+      listMembers: vi.fn<ApiServices["memberService"]["listMembers"]>(),
+      searchCandidates:
+        vi.fn<ApiServices["memberService"]["searchCandidates"]>(),
+      addMember: vi.fn<ApiServices["memberService"]["addMember"]>(),
+      updateMember: vi.fn<ApiServices["memberService"]["updateMember"]>(),
+      removeMember: vi.fn<ApiServices["memberService"]["removeMember"]>()
+    }
   };
 }
 
@@ -38,7 +64,11 @@ async function createHarness(environment: ApiConfig["environment"] = "test") {
     webOrigin: "https://web.example.test",
     authStorePath: ".local-data/auth-store.json"
   };
-  const app = buildApp(config, { authService, userService });
+  const app = buildApp(config, {
+    authService,
+    userService,
+    ...createProjectServiceStubs()
+  });
   return { app, authService, userService, config };
 }
 
