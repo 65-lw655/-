@@ -1,5 +1,6 @@
 import {
   ProjectEditorDialog as SharedProjectEditorDialog,
+  type ProjectRepository,
   ProjectRepositoryError
 } from "@project-online/ui";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@project-online/domain";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -23,10 +25,11 @@ import type {
   ProjectDetails,
   ProjectsClient
 } from "./projects-client.js";
-import { toProjectUpdateRepositoryError } from "./project-repository-error.js";
+import { createOnlineProjectRepository } from "./online-project-repository.js";
 
 interface SharedProps {
   client: ProjectsClient;
+  repository?: ProjectRepository;
   onClose(): void;
   onSaved(details: ProjectDetails): void;
   onSessionExpired(): void;
@@ -103,6 +106,11 @@ function focusableControls(dialog: HTMLElement): HTMLElement[] {
 }
 
 export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
+  const repository = useMemo(
+    () => props.repository ?? createOnlineProjectRepository(props.client),
+    [props.client, props.repository]
+  );
+
   if (props.mode === "edit") {
     return (
       <SharedProjectEditorDialog
@@ -118,26 +126,7 @@ export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
         onAuthenticationRequired={props.onSessionExpired}
         onClose={props.onClose}
         onSaved={props.onSaved}
-        repository={{
-          listProjects: async (filters) => {
-            const page = await props.client.listProjects(filters);
-            return {
-              ...page,
-              items: page.items.map(({ owners, ...item }) => ({
-                ...item,
-                ownerLabels: owners.map(({ displayName }) => displayName)
-              }))
-            };
-          },
-          getProject: async (projectId) => props.client.getProject(projectId),
-          updateProject: async (projectId, input) => {
-            try {
-              return await props.client.updateProject(projectId, input);
-            } catch (error) {
-              throw toProjectUpdateRepositoryError(error, input);
-            }
-          }
-        }}
+        repository={repository}
         submitLabel="保存修改"
       />
     );

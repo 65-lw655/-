@@ -8,7 +8,13 @@ export function toProjectUpdateRepositoryError(
   input: ProjectInput
 ): unknown {
   if (!(error instanceof ApiClientError)) {
-    return error;
+    return new ProjectRepositoryError(
+      "UNAVAILABLE",
+      error instanceof Error && error.message
+        ? error.message
+        : "项目保存失败，请重试",
+      { cause: error }
+    );
   }
 
   if (

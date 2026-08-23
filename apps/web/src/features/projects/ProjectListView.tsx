@@ -1,6 +1,5 @@
 import {
   ProjectListView as SharedProjectListView,
-  ProjectRepositoryError,
   type ProjectRepository
 } from "@project-online/ui";
 import {
@@ -12,8 +11,8 @@ import {
 } from "@project-online/domain";
 import { useEffect, useMemo, useState } from "react";
 
-import { ApiClientError } from "../../api-client.js";
 import type { ProjectsClient } from "./projects-client.js";
+import { createOnlineProjectRepository } from "./online-project-repository.js";
 
 interface ViewFilters {
   query: string;
@@ -26,6 +25,7 @@ interface ViewFilters {
 
 export interface ProjectListViewProps {
   client: ProjectsClient;
+  repository?: ProjectRepository;
   sessionRole: SystemRole;
   onCreateProject?(): void;
   onOpenProject(projectId: string): void;
@@ -99,31 +99,9 @@ function writeFilters(filters: ViewFilters): void {
   );
 }
 
-function mapRepositoryError(error: unknown, forbiddenMessage: string): unknown {
-  if (!(error instanceof ApiClientError)) {
-    return error;
-  }
-  if (
-    error.status === 401 &&
-    (error.code === "SESSION_EXPIRED" ||
-      error.code === "AUTHENTICATION_REQUIRED")
-  ) {
-    return new ProjectRepositoryError("AUTHENTICATION_REQUIRED", "请重新登录", {
-      cause: error
-    });
-  }
-  if (error.status === 403) {
-    return new ProjectRepositoryError("PROJECT_FORBIDDEN", forbiddenMessage, {
-      cause: error
-    });
-  }
-  return new ProjectRepositoryError("UNAVAILABLE", error.message, {
-    cause: error
-  });
-}
-
 export function ProjectListView({
   client,
+  repository,
   sessionRole,
   onCreateProject,
   onOpenProject,
@@ -133,38 +111,9 @@ export function ProjectListView({
   const [filters, setFilters] = useState<ViewFilters>(() =>
     readFilters(window.location.search)
   );
-  const repository = useMemo<ProjectRepository>(
-    () => ({
-      listProjects: async (nextFilters) => {
-        try {
-          const page = await client.listProjects(nextFilters);
-          return {
-            ...page,
-            items: page.items.map(({ owners, ...item }) => ({
-              ...item,
-              ownerLabels: owners.map(({ displayName }) => displayName)
-            }))
-          };
-        } catch (error) {
-          throw mapRepositoryError(error, "您没有查看项目的权限");
-        }
-      },
-      getProject: async (projectId) => {
-        try {
-          return await client.getProject(projectId);
-        } catch (error) {
-          throw mapRepositoryError(error, "您没有查看此项目的权限");
-        }
-      },
-      updateProject: async (projectId, input) => {
-        try {
-          return await client.updateProject(projectId, input);
-        } catch (error) {
-          throw mapRepositoryError(error, "您没有编辑项目的权限");
-        }
-      }
-    }),
-    [client]
+  const projectRepository = useMemo(
+    () => repository ?? createOnlineProjectRepository(client),
+    [client, repository]
   );
 
   useEffect(() => {
@@ -197,7 +146,7 @@ export function ProjectListView({
       }}
       onOpenProject={onOpenProject}
       refreshToken={refreshToken}
-      repository={repository}
+      repository={projectRepository}
     />
   );
 }

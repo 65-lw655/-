@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 
 import { ApiClientError } from "../../api-client.js";
 import { ProjectMembersPanel } from "./ProjectMembersPanel.js";
-import { toProjectUpdateRepositoryError } from "./project-repository-error.js";
+import { createOnlineProjectRepository } from "./online-project-repository.js";
 import type {
   ProjectAuditView,
   ProjectsClient
@@ -23,6 +23,7 @@ import type {
 export interface ProjectDetailViewProps {
   projectId: string;
   client: ProjectsClient;
+  repository?: ProjectRepository;
   onBack(): void;
   onSessionExpired(): void;
 }
@@ -91,86 +92,16 @@ function focusableControls(dialog: HTMLElement): HTMLElement[] {
   );
 }
 
-function mapRepositoryError(
-  error: unknown,
-  options: {
-    forbiddenMessage: string;
-    notFoundMessage?: string;
-  }
-): unknown {
-  if (!(error instanceof ApiClientError)) {
-    return error;
-  }
-  if (
-    error.status === 401 &&
-    (error.code === "SESSION_EXPIRED" ||
-      error.code === "AUTHENTICATION_REQUIRED")
-  ) {
-    return new ProjectRepositoryError("AUTHENTICATION_REQUIRED", "请重新登录", {
-      cause: error
-    });
-  }
-  if (error.status === 403) {
-    return new ProjectRepositoryError(
-      "PROJECT_FORBIDDEN",
-      options.forbiddenMessage,
-      { cause: error }
-    );
-  }
-  if (error.status === 404) {
-    return new ProjectRepositoryError(
-      "PROJECT_NOT_FOUND",
-      options.notFoundMessage ?? "项目不存在或您无权查看",
-      { cause: error }
-    );
-  }
-  return new ProjectRepositoryError("UNAVAILABLE", error.message, {
-    cause: error
-  });
-}
-
 export function ProjectDetailView({
   projectId,
   client,
+  repository,
   onBack,
   onSessionExpired
 }: ProjectDetailViewProps) {
-  const repository = useMemo<ProjectRepository>(
-    () => ({
-      listProjects: async (filters) => {
-        try {
-          const page = await client.listProjects(filters);
-          return {
-            ...page,
-            items: page.items.map(({ owners, ...item }) => ({
-              ...item,
-              ownerLabels: owners.map(({ displayName }) => displayName)
-            }))
-          };
-        } catch (error) {
-          throw mapRepositoryError(error, {
-            forbiddenMessage: "您没有查看项目的权限"
-          });
-        }
-      },
-      getProject: async (requestedProjectId) => {
-        try {
-          return await client.getProject(requestedProjectId);
-        } catch (error) {
-          throw mapRepositoryError(error, {
-            forbiddenMessage: "您没有查看此项目的权限"
-          });
-        }
-      },
-      updateProject: async (requestedProjectId, input) => {
-        try {
-          return await client.updateProject(requestedProjectId, input);
-        } catch (error) {
-          throw toProjectUpdateRepositoryError(error, input);
-        }
-      }
-    }),
-    [client]
+  const projectRepository = useMemo(
+    () => repository ?? createOnlineProjectRepository(client),
+    [client, repository]
   );
   const [lifecycleAction, setLifecycleAction] =
     useState<LifecycleAction | null>(null);
@@ -497,7 +428,7 @@ export function ProjectDetailView({
       onAuthenticationRequired={onSessionExpired}
       onBack={onBack}
       projectId={projectId}
-      repository={repository}
+      repository={projectRepository}
       sectionSlot={(context) => {
         const canLoadMore = auditItems.length < auditTotal;
         const actionLabel = lifecycleAction === "archive" ? "归档" : "恢复";
