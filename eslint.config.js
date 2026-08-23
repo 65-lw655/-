@@ -10,6 +10,7 @@ export default tseslint.config(
       "**/dist/**",
       "**/coverage/**",
       "**/node_modules/**",
+      "**/src-tauri/target/**",
       ".worktrees/**"
     ]
   },
@@ -27,7 +28,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ["apps/web/**/*.{ts,tsx}"],
+    files: ["apps/{web,desktop}/**/*.{ts,tsx}"],
     plugins: {
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh
