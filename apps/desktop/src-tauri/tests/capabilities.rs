@@ -9,7 +9,16 @@ fn default_capability_excludes_forbidden_integrations() {
         .to_string()
         .to_lowercase();
 
-    for forbidden in ["shell", "sql", "calendar", "reminder", "todo", "microsoft", "task"] {
+    for forbidden in [
+        "shell",
+        "fs",
+        "sql",
+        "calendar",
+        "reminder",
+        "todo",
+        "microsoft",
+        "task",
+    ] {
         assert!(
             !serialized.contains(forbidden),
             "capability file must not include forbidden permission: {forbidden}"

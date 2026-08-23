@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
-    "test": "vitest --run src",
+    "test": "vitest src",
     "build:web": "vite build",
     "build": "vite build",
     "tauri": "tauri",
