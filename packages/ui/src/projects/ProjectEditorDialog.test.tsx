@@ -4,6 +4,7 @@ import "@testing-library/jest-dom/vitest";
 
 import type { ProjectPermissions, ProjectRecord } from "@project-online/domain";
 import {
+  createEvent,
   cleanup,
   fireEvent,
   render,
@@ -111,6 +112,7 @@ describe("ProjectEditorDialog", () => {
   });
 
   it("maps forbidden and validation failures without treating offline state as a save failure", async () => {
+    const onClose = vi.fn();
     const forbiddenRepository = createRepository(
       vi
         .fn<ProjectRepository["updateProject"]>()
@@ -134,7 +136,7 @@ describe("ProjectEditorDialog", () => {
     const { rerender } = render(
       <ProjectEditorDialog
         details={details()}
-        onClose={vi.fn()}
+        onClose={onClose}
         onSaved={vi.fn()}
         repository={forbiddenRepository}
       />
@@ -148,7 +150,7 @@ describe("ProjectEditorDialog", () => {
     rerender(
       <ProjectEditorDialog
         details={details()}
-        onClose={vi.fn()}
+        onClose={onClose}
         onSaved={vi.fn()}
         repository={validationRepository}
       />
@@ -156,6 +158,37 @@ describe("ProjectEditorDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "保存项目" }));
     expect(await screen.findByText("项目名称不能为空")).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "编辑项目" })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
     expect(screen.queryByText("离线状态导致保存失败")).toBeNull();
+  });
+
+  it("prevents and stops Escape before closing the dialog", async () => {
+    const parentKeyDown = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <div onKeyDown={parentKeyDown}>
+        <ProjectEditorDialog
+          details={details()}
+          onClose={onClose}
+          onSaved={vi.fn()}
+          repository={createRepository()}
+        />
+      </div>
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "编辑项目" });
+    const event = createEvent.keyDown(dialog, {
+      bubbles: true,
+      cancelable: true,
+      key: "Escape"
+    });
+
+    fireEvent(dialog, event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(parentKeyDown).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });

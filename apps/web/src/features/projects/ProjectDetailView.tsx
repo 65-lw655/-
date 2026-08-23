@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 
 import { ApiClientError } from "../../api-client.js";
 import { ProjectMembersPanel } from "./ProjectMembersPanel.js";
+import { toProjectUpdateRepositoryError } from "./project-repository-error.js";
 import type {
   ProjectAuditView,
   ProjectsClient
@@ -165,9 +166,7 @@ export function ProjectDetailView({
         try {
           return await client.updateProject(requestedProjectId, input);
         } catch (error) {
-          throw mapRepositoryError(error, {
-            forbiddenMessage: "您没有编辑项目的权限"
-          });
+          throw toProjectUpdateRepositoryError(error, input);
         }
       }
     }),

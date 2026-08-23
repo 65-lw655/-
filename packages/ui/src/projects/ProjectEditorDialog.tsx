@@ -173,7 +173,7 @@ export function ProjectEditorDialog({
         saveError.code === "VALIDATION_FAILED"
       ) {
         setFieldErrors(saveError.fieldErrors ?? {});
-        setError("");
+        setError(saveError.fieldErrors ? "" : saveError.message);
         return;
       }
 
@@ -188,8 +188,9 @@ export function ProjectEditorDialog({
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     if (event.key === "Escape") {
-      if (!isSubmitting) {
-        event.preventDefault();
+      event.preventDefault();
+      event.stopPropagation();
+      if (!isSubmitting && !submissionLocked.current) {
         onClose();
       }
       return;

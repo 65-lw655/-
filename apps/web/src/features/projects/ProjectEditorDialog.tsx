@@ -23,6 +23,7 @@ import type {
   ProjectDetails,
   ProjectsClient
 } from "./projects-client.js";
+import { toProjectUpdateRepositoryError } from "./project-repository-error.js";
 
 interface SharedProps {
   client: ProjectsClient;
@@ -101,29 +102,6 @@ function focusableControls(dialog: HTMLElement): HTMLElement[] {
   );
 }
 
-function mapRepositoryError(error: unknown): unknown {
-  if (!(error instanceof ApiClientError)) {
-    return error;
-  }
-  if (
-    error.status === 401 &&
-    (error.code === "SESSION_EXPIRED" ||
-      error.code === "AUTHENTICATION_REQUIRED")
-  ) {
-    return new ProjectRepositoryError("AUTHENTICATION_REQUIRED", "请重新登录", {
-      cause: error
-    });
-  }
-  if (error.status === 403) {
-    return new ProjectRepositoryError("PROJECT_FORBIDDEN", "您没有编辑项目的权限", {
-      cause: error
-    });
-  }
-  return new ProjectRepositoryError("UNAVAILABLE", error.message, {
-    cause: error
-  });
-}
-
 export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
   if (props.mode === "edit") {
     return (
@@ -156,7 +134,7 @@ export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
             try {
               return await props.client.updateProject(projectId, input);
             } catch (error) {
-              throw mapRepositoryError(error);
+              throw toProjectUpdateRepositoryError(error, input);
             }
           }
         }}
