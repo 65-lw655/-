@@ -270,6 +270,288 @@ fn project_read_detail_maps_fields_and_permissions() {
     assert_eq!(details.sync_state, "PENDING");
 }
 
+#[test]
+fn project_update_writes_project_outbox_and_advances_device_sequence() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let db_path = temp_dir.path().join("local.sqlite");
+    {
+        let db = LocalDatabase::open(&db_path).expect("open local database");
+        insert_project_fixture(
+            &db_path,
+            ProjectFixture {
+                id: editable_project_id(),
+                name: "示例-离线重点项目",
+                year: 2026,
+                status: "深化中",
+                lifecycle: "ACTIVE",
+                local_updated_at: "2026-08-23T13:00:00.000Z",
+                commit_sequence: 7,
+                sync_state: "SYNCED",
+                can_edit: 1,
+            },
+        );
+        assert_eq!(
+            db.device_settings()
+                .expect("device settings")
+                .next_client_sequence,
+            1
+        );
+    }
+
+    let mut db = LocalDatabase::open(&db_path).expect("reopen local database");
+    let saved = db
+        .update_project(
+            editable_project_id(),
+            project_update_input("示例-本地已修改"),
+        )
+        .expect("update project");
+    drop(db);
+
+    let reopened = LocalDatabase::open(&db_path).expect("reopen local database");
+    let details = reopened
+        .get_project(editable_project_id())
+        .expect("read updated project");
+    let outbox = outbox_rows(&db_path);
+
+    assert_eq!(saved.sync_state, "PENDING");
+    assert_eq!(details.project.name, "示例-本地已修改");
+    assert_eq!(details.project.year, 2027);
+    assert_eq!(details.project.r#type, "展陈工程");
+    assert_eq!(details.project.status, "施工中");
+    assert_eq!(details.project.phase, "施工交付");
+    assert_eq!(details.project.filing_status, "已归档");
+    assert_eq!(
+        details.project.planned_completion_date.as_deref(),
+        Some("2027-05-01")
+    );
+    assert_eq!(
+        details.project.actual_completion_date.as_deref(),
+        Some("2027-05-20")
+    );
+    assert_eq!(details.project.revision, 2);
+    assert_eq!(details.project.commit_sequence, 7);
+    assert_eq!(details.sync_state, "PENDING");
+    assert_eq!(outbox.len(), 1);
+    assert_eq!(outbox[0].protocol_version, 1);
+    assert_eq!(outbox[0].client_sequence, 1);
+    assert_eq!(outbox[0].entity_type, "PROJECT");
+    assert_eq!(outbox[0].project_id, editable_project_id());
+    assert_eq!(outbox[0].action, "UPSERT");
+    assert_eq!(outbox[0].base_revision, 2);
+    assert_eq!(
+        outbox[0].payload_json,
+        r#"{"name":"示例-本地已修改","year":2027,"type":"展陈工程","status":"施工中","phase":"施工交付","filingStatus":"已归档","plannedCompletionDate":"2027-05-01","actualCompletionDate":"2027-05-20"}"#
+    );
+    assert_eq!(
+        reopened
+            .device_settings()
+            .expect("device settings")
+            .next_client_sequence,
+        2
+    );
+}
+
+#[test]
+fn project_update_rolls_back_project_and_sequence_when_outbox_insert_fails() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let db_path = temp_dir.path().join("local.sqlite");
+    let mut db = LocalDatabase::open(&db_path).expect("open local database");
+    insert_project_fixture(
+        &db_path,
+        ProjectFixture {
+            id: editable_project_id(),
+            name: "示例-离线重点项目",
+            year: 2026,
+            status: "深化中",
+            lifecycle: "ACTIVE",
+            local_updated_at: "2026-08-23T13:00:00.000Z",
+            commit_sequence: 7,
+            sync_state: "SYNCED",
+            can_edit: 1,
+        },
+    );
+    install_outbox_abort_trigger(&db_path);
+
+    let error = db
+        .update_project(editable_project_id(), project_update_input("示例-不会落库"))
+        .expect_err("outbox insert failure rolls back");
+    drop(db);
+
+    let reopened = LocalDatabase::open(&db_path).expect("reopen local database");
+    let details = reopened
+        .get_project(editable_project_id())
+        .expect("read project");
+
+    assert_eq!(error.code(), "LOCAL_WRITE_FAILED");
+    assert_eq!(details.project.name, "示例-离线重点项目");
+    assert_eq!(details.sync_state, "SYNCED");
+    assert_eq!(
+        reopened
+            .device_settings()
+            .expect("device settings")
+            .next_client_sequence,
+        1
+    );
+    assert!(outbox_rows(&db_path).is_empty());
+}
+
+#[test]
+fn project_update_rejects_forbidden_project_without_writes() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let db_path = temp_dir.path().join("local.sqlite");
+    let mut db = LocalDatabase::open(&db_path).expect("open local database");
+    insert_project_fixture(
+        &db_path,
+        ProjectFixture {
+            id: editable_project_id(),
+            name: "示例-只读项目",
+            year: 2026,
+            status: "深化中",
+            lifecycle: "ACTIVE",
+            local_updated_at: "2026-08-23T13:00:00.000Z",
+            commit_sequence: 7,
+            sync_state: "SYNCED",
+            can_edit: 0,
+        },
+    );
+
+    let error = db
+        .update_project(
+            editable_project_id(),
+            project_update_input("示例-不允许修改"),
+        )
+        .expect_err("forbidden project fails");
+    drop(db);
+
+    let reopened = LocalDatabase::open(&db_path).expect("reopen local database");
+    let details = reopened
+        .get_project(editable_project_id())
+        .expect("read project");
+
+    assert_eq!(error.code(), "PROJECT_FORBIDDEN");
+    assert_eq!(details.project.name, "示例-只读项目");
+    assert_eq!(details.sync_state, "SYNCED");
+    assert_eq!(
+        reopened
+            .device_settings()
+            .expect("device settings")
+            .next_client_sequence,
+        1
+    );
+    assert!(outbox_rows(&db_path).is_empty());
+}
+
+#[test]
+fn project_update_rejects_invalid_input_with_field_errors_without_writes() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let db_path = temp_dir.path().join("local.sqlite");
+    let mut db = LocalDatabase::open(&db_path).expect("open local database");
+    insert_project_fixture(
+        &db_path,
+        ProjectFixture {
+            id: editable_project_id(),
+            name: "示例-离线重点项目",
+            year: 2026,
+            status: "深化中",
+            lifecycle: "ACTIVE",
+            local_updated_at: "2026-08-23T13:00:00.000Z",
+            commit_sequence: 7,
+            sync_state: "SYNCED",
+            can_edit: 1,
+        },
+    );
+
+    let error = db
+        .update_project(
+            editable_project_id(),
+            super::UpdateLocalProject {
+                name: " ".to_string(),
+                year: 2200,
+                r#type: "展览展示".to_string(),
+                status: "未知状态".to_string(),
+                phase: "深化设计".to_string(),
+                filing_status: "未归档".to_string(),
+                planned_completion_date: Some("2026-02-30".to_string()),
+                actual_completion_date: None,
+            },
+        )
+        .expect_err("invalid input fails");
+    drop(db);
+
+    let reopened = LocalDatabase::open(&db_path).expect("reopen local database");
+    let details = reopened
+        .get_project(editable_project_id())
+        .expect("read project");
+
+    assert_eq!(error.code(), "VALIDATION_FAILED");
+    assert_eq!(
+        error.field_errors().expect("field errors"),
+        vec![
+            ("name".to_string(), "长度必须为 1-200 个字符".to_string()),
+            ("year".to_string(), "必须为 1900-2100 的整数".to_string()),
+            ("status".to_string(), "状态无效".to_string()),
+            (
+                "plannedCompletionDate".to_string(),
+                "必须是真实的 YYYY-MM-DD 日期或 null".to_string()
+            )
+        ]
+    );
+    assert_eq!(details.project.name, "示例-离线重点项目");
+    assert_eq!(details.sync_state, "SYNCED");
+    assert_eq!(
+        reopened
+            .device_settings()
+            .expect("device settings")
+            .next_client_sequence,
+        1
+    );
+    assert!(outbox_rows(&db_path).is_empty());
+}
+
+#[test]
+fn project_update_uses_distinct_operation_ids_and_consecutive_sequences() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let db_path = temp_dir.path().join("local.sqlite");
+    let mut db = LocalDatabase::open(&db_path).expect("open local database");
+    insert_project_fixture(
+        &db_path,
+        ProjectFixture {
+            id: editable_project_id(),
+            name: "示例-离线重点项目",
+            year: 2026,
+            status: "深化中",
+            lifecycle: "ACTIVE",
+            local_updated_at: "2026-08-23T13:00:00.000Z",
+            commit_sequence: 7,
+            sync_state: "SYNCED",
+            can_edit: 1,
+        },
+    );
+
+    db.update_project(
+        editable_project_id(),
+        project_update_input("示例-第一次修改"),
+    )
+    .expect("first update");
+    db.update_project(
+        editable_project_id(),
+        project_update_input("示例-第二次修改"),
+    )
+    .expect("second update");
+    drop(db);
+
+    let rows = outbox_rows(&db_path);
+
+    assert_eq!(rows.len(), 2);
+    assert_ne!(rows[0].operation_id, rows[1].operation_id);
+    assert_eq!(
+        rows.iter()
+            .map(|row| row.client_sequence)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+}
+
 fn project_filters() -> super::ProjectListFilters {
     super::ProjectListFilters {
         query: None,
@@ -283,6 +565,23 @@ fn project_filters() -> super::ProjectListFilters {
 
 fn fictional_project_id() -> &'static str {
     "00000000-0000-4000-8000-0000000000f5"
+}
+
+fn editable_project_id() -> &'static str {
+    "00000000-0000-4000-8000-000000000101"
+}
+
+fn project_update_input(name: &str) -> super::UpdateLocalProject {
+    super::UpdateLocalProject {
+        name: name.to_string(),
+        year: 2027,
+        r#type: "展陈工程".to_string(),
+        status: "施工中".to_string(),
+        phase: "施工交付".to_string(),
+        filing_status: "已归档".to_string(),
+        planned_completion_date: Some("2027-05-01".to_string()),
+        actual_completion_date: Some("2027-05-20".to_string()),
+    }
 }
 
 struct ProjectFixture {
@@ -360,4 +659,63 @@ fn insert_project_fixture(path: &Path, fixture: ProjectFixture) {
             ],
         )
         .expect("insert project fixture");
+}
+
+struct OutboxRow {
+    operation_id: String,
+    protocol_version: i64,
+    client_sequence: i64,
+    entity_type: String,
+    project_id: String,
+    action: String,
+    base_revision: i64,
+    payload_json: String,
+}
+
+fn outbox_rows(path: &Path) -> Vec<OutboxRow> {
+    let connection = rusqlite::Connection::open(path).expect("open sqlite");
+    let mut statement = connection
+        .prepare(
+            "SELECT
+                operation_id,
+                protocol_version,
+                client_sequence,
+                entity_type,
+                project_id,
+                action,
+                base_revision,
+                payload_json
+             FROM sync_outbox
+             ORDER BY client_sequence",
+        )
+        .expect("prepare outbox read");
+    statement
+        .query_map([], |row| {
+            Ok(OutboxRow {
+                operation_id: row.get(0)?,
+                protocol_version: row.get(1)?,
+                client_sequence: row.get(2)?,
+                entity_type: row.get(3)?,
+                project_id: row.get(4)?,
+                action: row.get(5)?,
+                base_revision: row.get(6)?,
+                payload_json: row.get(7)?,
+            })
+        })
+        .expect("read outbox rows")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("map outbox rows")
+}
+
+fn install_outbox_abort_trigger(path: &Path) {
+    let connection = rusqlite::Connection::open(path).expect("open sqlite");
+    connection
+        .execute_batch(
+            "CREATE TRIGGER abort_sync_outbox_insert
+             BEFORE INSERT ON sync_outbox
+             BEGIN
+               SELECT RAISE(ABORT, 'outbox blocked');
+             END;",
+        )
+        .expect("install outbox abort trigger");
 }

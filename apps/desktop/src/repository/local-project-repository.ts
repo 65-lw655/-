@@ -30,6 +30,63 @@ function mapReadError(error: unknown, fallback: string): ProjectRepositoryError 
   });
 }
 
+function fieldErrorsFrom(error: DesktopCommandError):
+  | Readonly<Record<string, string>>
+  | undefined {
+  if (
+    typeof error.fieldErrors !== "object" ||
+    error.fieldErrors === null ||
+    Array.isArray(error.fieldErrors)
+  ) {
+    return undefined;
+  }
+
+  const fields = Object.entries(error.fieldErrors).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string"
+  );
+
+  return fields.length > 0 ? Object.fromEntries(fields) : undefined;
+}
+
+function mapUpdateError(error: unknown): ProjectRepositoryError {
+  if (isCommandError(error)) {
+    if (error.code === "PROJECT_FORBIDDEN") {
+      return new ProjectRepositoryError(
+        "PROJECT_FORBIDDEN",
+        "您没有编辑项目的权限",
+        { cause: error }
+      );
+    }
+    if (error.code === "PROJECT_NOT_FOUND") {
+      return new ProjectRepositoryError(
+        "PROJECT_NOT_FOUND",
+        "项目不存在或您无权查看",
+        { cause: error }
+      );
+    }
+    if (error.code === "VALIDATION_FAILED") {
+      return new ProjectRepositoryError(
+        "VALIDATION_FAILED",
+        typeof error.message === "string" ? error.message : "字段校验失败",
+        { cause: error, fieldErrors: fieldErrorsFrom(error) }
+      );
+    }
+    if (error.code === "LOCAL_WRITE_FAILED") {
+      return new ProjectRepositoryError(
+        "UNAVAILABLE",
+        "本地项目保存失败，请重试",
+        { cause: error }
+      );
+    }
+  }
+
+  return new ProjectRepositoryError(
+    "UNAVAILABLE",
+    unavailableMessage(error, "本地项目保存失败，请重试"),
+    { cause: error }
+  );
+}
+
 export function createLocalProjectRepository(
   bridge: Pick<DesktopBridge, "listProjects" | "getProject" | "updateProject">
 ): ProjectRepository {
@@ -52,7 +109,7 @@ export function createLocalProjectRepository(
       try {
         return await bridge.updateProject(projectId, input);
       } catch (error) {
-        throw mapReadError(error, "本地项目保存失败，请重试");
+        throw mapUpdateError(error);
       }
     }
   };

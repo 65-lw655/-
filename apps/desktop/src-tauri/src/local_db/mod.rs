@@ -1,5 +1,6 @@
 mod migrations;
 mod models;
+mod outbox;
 mod projects;
 
 #[cfg(any(test, feature = "development"))]
@@ -9,11 +10,15 @@ use std::fmt;
 use std::path::Path;
 
 use rusqlite::{params, Connection};
+use serde::Serialize;
 use thiserror::Error;
 use uuid::Uuid;
 
 pub use models::DeviceSettings;
-pub use projects::{LocalProjectDetails, LocalProjectPage, LocalProjectRecord, ProjectListFilters};
+pub use projects::{
+    LocalProjectDetails, LocalProjectPage, LocalProjectRecord, ProjectListFilters,
+    UpdateLocalProject,
+};
 
 #[cfg(test)]
 mod tests;
@@ -42,6 +47,12 @@ pub enum LocalDbError {
     CorruptState,
     #[error("local project was not found")]
     ProjectNotFound,
+    #[error("local project cannot be edited")]
+    ProjectForbidden,
+    #[error("local project validation failed")]
+    ValidationFailed { field_errors: Vec<FieldError> },
+    #[error("failed to write local project")]
+    LocalWriteFailed(#[source] rusqlite::Error),
     #[error("local project data is corrupt")]
     CorruptProject,
 }
@@ -54,7 +65,22 @@ impl LocalDbError {
             Self::Migration { .. } => "LOCAL_DB_MIGRATION_FAILED",
             Self::CorruptState => "LOCAL_DB_CORRUPT_STATE",
             Self::ProjectNotFound => "PROJECT_NOT_FOUND",
+            Self::ProjectForbidden => "PROJECT_FORBIDDEN",
+            Self::ValidationFailed { .. } => "VALIDATION_FAILED",
+            Self::LocalWriteFailed(_) => "LOCAL_WRITE_FAILED",
             Self::CorruptProject => "LOCAL_PROJECT_CORRUPT",
+        }
+    }
+
+    pub fn field_errors(&self) -> Option<Vec<(String, String)>> {
+        match self {
+            Self::ValidationFailed { field_errors } => Some(
+                field_errors
+                    .iter()
+                    .map(|field| (field.field.clone(), field.message.clone()))
+                    .collect(),
+            ),
+            _ => None,
         }
     }
 
@@ -65,6 +91,13 @@ impl LocalDbError {
             _ => None,
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldError {
+    pub field: String,
+    pub message: String,
 }
 
 impl LocalDatabase {

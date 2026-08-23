@@ -22,6 +22,7 @@ pub fn run() {
     let builder = builder.invoke_handler(tauri::generate_handler![
         commands::projects::list_local_projects,
         commands::projects::get_local_project,
+        commands::projects::update_local_project,
         commands::projects::seed_fictional_local_project,
         commands::status::get_local_status
     ]);
@@ -30,6 +31,7 @@ pub fn run() {
     let builder = builder.invoke_handler(tauri::generate_handler![
         commands::projects::list_local_projects,
         commands::projects::get_local_project,
+        commands::projects::update_local_project,
         commands::status::get_local_status
     ]);
 

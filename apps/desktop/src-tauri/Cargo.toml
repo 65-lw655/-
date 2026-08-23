@@ -13,6 +13,7 @@ tauri-build = { version = "2" }
 [dependencies]
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1"
 tauri = { version = "2" }
 thiserror = "2.0.20"
 uuid = { version = "1.25.0", features = ["v4", "serde"] }
@@ -21,5 +22,4 @@ uuid = { version = "1.25.0", features = ["v4", "serde"] }
 development = []
 
 [dev-dependencies]
-serde_json = "1"
 tempfile = "3.27.0"

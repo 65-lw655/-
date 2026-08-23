@@ -137,6 +137,82 @@ describe("local project repository", () => {
     expect(bridge.updateProject).toHaveBeenCalledWith(projectId, input);
   });
 
+  it("maps PROJECT_FORBIDDEN from local update to the shared repository error", async () => {
+    const bridge = bridgeStub({
+      updateProject: vi.fn().mockRejectedValue({
+        code: "PROJECT_FORBIDDEN",
+        message: "forbidden"
+      })
+    });
+    const repository = createLocalProjectRepository(bridge);
+
+    await expect(
+      repository.updateProject(
+        "00000000-0000-4000-8000-0000000000f5",
+        projectInput()
+      )
+    ).rejects.toMatchObject(
+      new ProjectRepositoryError("PROJECT_FORBIDDEN", "您没有编辑项目的权限")
+    );
+  });
+
+  it("maps VALIDATION_FAILED from local update with field errors", async () => {
+    const fieldErrors = { name: "长度必须为 1-200 个字符" };
+    const bridge = bridgeStub({
+      updateProject: vi.fn().mockRejectedValue({
+        code: "VALIDATION_FAILED",
+        message: "字段校验失败",
+        fieldErrors
+      })
+    });
+    const repository = createLocalProjectRepository(bridge);
+
+    await expect(
+      repository.updateProject(
+        "00000000-0000-4000-8000-0000000000f5",
+        projectInput()
+      )
+    ).rejects.toMatchObject(
+      new ProjectRepositoryError("VALIDATION_FAILED", "字段校验失败", {
+        fieldErrors
+      })
+    );
+  });
+
+  it("maps LOCAL_WRITE_FAILED from local update to unavailable", async () => {
+    const bridge = bridgeStub({
+      updateProject: vi.fn().mockRejectedValue({
+        code: "LOCAL_WRITE_FAILED",
+        message: "write failed"
+      })
+    });
+    const repository = createLocalProjectRepository(bridge);
+
+    await expect(
+      repository.updateProject(
+        "00000000-0000-4000-8000-0000000000f5",
+        projectInput()
+      )
+    ).rejects.toMatchObject(
+      new ProjectRepositoryError("UNAVAILABLE", "本地项目保存失败，请重试")
+    );
+  });
+
+  it("preserves pending sync state after a successful local update", async () => {
+    const details = { ...projectDetails(), syncState: "PENDING" as const };
+    const bridge = bridgeStub({
+      updateProject: vi.fn().mockResolvedValue(details)
+    });
+    const repository = createLocalProjectRepository(bridge);
+
+    await expect(
+      repository.updateProject(
+        "00000000-0000-4000-8000-0000000000f5",
+        projectInput()
+      )
+    ).resolves.toMatchObject({ syncState: "PENDING" });
+  });
+
   it("keeps SQL out of the TypeScript adapter", () => {
     const sourcePath = fileURLToPath(
       new URL("./local-project-repository.ts", import.meta.url)

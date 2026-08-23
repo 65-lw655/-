@@ -1,7 +1,8 @@
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, OptionalExtension, TransactionBehavior};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-use super::{LocalDatabase, LocalDbError};
+use super::{outbox, read_device_settings, FieldError, LocalDatabase, LocalDbError};
 
 const PROJECT_STATUSES: &[&str] = &[
     "中标待签",
@@ -16,6 +17,29 @@ const PROJECT_STATUSES: &[&str] = &[
 
 const PROJECT_LIFECYCLES: &[&str] = &["ACTIVE", "ARCHIVED"];
 const SYNC_STATES: &[&str] = &["SYNCED", "PENDING"];
+const PROJECT_DETAILS_SELECT: &str = "SELECT
+    id,
+    name,
+    year,
+    type,
+    status,
+    phase,
+    filing_status,
+    planned_completion_date,
+    actual_completion_date,
+    lifecycle,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by,
+    revision,
+    commit_sequence,
+    archived_at,
+    archived_by,
+    can_edit,
+    sync_state
+ FROM local_projects
+ WHERE id = ?1";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -83,6 +107,19 @@ pub struct LocalProjectDetails {
     pub project: LocalProjectRecord,
     pub permissions: LocalProjectPermissions,
     pub sync_state: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateLocalProject {
+    pub name: String,
+    pub year: i64,
+    pub r#type: String,
+    pub status: String,
+    pub phase: String,
+    pub filing_status: String,
+    pub planned_completion_date: Option<String>,
+    pub actual_completion_date: Option<String>,
 }
 
 struct ProjectRow {
@@ -188,29 +225,7 @@ impl LocalDatabase {
         let row = self
             .connection
             .query_row(
-                "SELECT
-                    id,
-                    name,
-                    year,
-                    type,
-                    status,
-                    phase,
-                    filing_status,
-                    planned_completion_date,
-                    actual_completion_date,
-                    lifecycle,
-                    created_at,
-                    created_by,
-                    updated_at,
-                    updated_by,
-                    revision,
-                    commit_sequence,
-                    archived_at,
-                    archived_by,
-                    can_edit,
-                    sync_state
-                 FROM local_projects
-                 WHERE id = ?1",
+                PROJECT_DETAILS_SELECT,
                 params![project_id],
                 read_project_row,
             )
@@ -219,6 +234,110 @@ impl LocalDatabase {
             .ok_or(LocalDbError::ProjectNotFound)?;
 
         LocalProjectDetails::try_from(row)
+    }
+
+    pub fn update_project(
+        &mut self,
+        project_id: &str,
+        input: UpdateLocalProject,
+    ) -> Result<LocalProjectDetails, LocalDbError> {
+        validate_project_input(&input)?;
+
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(LocalDbError::LocalWriteFailed)?;
+
+        let current = transaction
+            .query_row(
+                PROJECT_DETAILS_SELECT,
+                params![project_id],
+                read_project_row,
+            )
+            .optional()
+            .map_err(LocalDbError::LocalWriteFailed)?
+            .ok_or(LocalDbError::ProjectNotFound)?;
+        validate_project_row(&current)?;
+        if current.can_edit != 1 {
+            return Err(LocalDbError::ProjectForbidden);
+        }
+
+        let device_settings = read_device_settings(&transaction)?;
+        let client_sequence = device_settings.next_client_sequence;
+        let device_id = device_settings.device_id.to_string();
+        let operation_id = Uuid::new_v4().to_string();
+        let payload_json =
+            serde_json::to_string(&input).map_err(|_| LocalDbError::CorruptProject)?;
+
+        transaction
+            .execute(
+                "UPDATE local_projects
+                 SET
+                   name = ?1,
+                   year = ?2,
+                   type = ?3,
+                   status = ?4,
+                   phase = ?5,
+                   filing_status = ?6,
+                   planned_completion_date = ?7,
+                   actual_completion_date = ?8,
+                   local_updated_at = datetime('now'),
+                   sync_state = 'PENDING'
+                 WHERE id = ?9",
+                params![
+                    input.name,
+                    input.year,
+                    input.r#type,
+                    input.status,
+                    input.phase,
+                    input.filing_status,
+                    input.planned_completion_date,
+                    input.actual_completion_date,
+                    project_id
+                ],
+            )
+            .map_err(LocalDbError::LocalWriteFailed)?;
+
+        outbox::insert_project_upsert(
+            &transaction,
+            outbox::OutboxInsert {
+                operation_id: &operation_id,
+                device_id: &device_id,
+                client_sequence,
+                project_id,
+                base_revision: current.project.revision,
+                payload_json: &payload_json,
+            },
+        )?;
+
+        let sequence_rows = transaction
+            .execute(
+                "UPDATE device_settings
+                 SET next_client_sequence = next_client_sequence + 1
+                 WHERE device_id = ?1 AND next_client_sequence = ?2",
+                params![device_id, client_sequence],
+            )
+            .map_err(LocalDbError::LocalWriteFailed)?;
+        if sequence_rows != 1 {
+            return Err(LocalDbError::LocalWriteFailed(
+                rusqlite::Error::QueryReturnedNoRows,
+            ));
+        }
+
+        let updated = transaction
+            .query_row(
+                PROJECT_DETAILS_SELECT,
+                params![project_id],
+                read_project_row,
+            )
+            .map_err(LocalDbError::LocalWriteFailed)
+            .and_then(LocalProjectDetails::try_from)?;
+
+        transaction
+            .commit()
+            .map_err(LocalDbError::LocalWriteFailed)?;
+
+        Ok(updated)
     }
 }
 
@@ -301,7 +420,66 @@ fn validate_project_row(row: &ProjectRow) -> Result<(), LocalDbError> {
     Ok(())
 }
 
+fn validate_project_input(input: &UpdateLocalProject) -> Result<(), LocalDbError> {
+    let mut field_errors = Vec::new();
+
+    if input.name.trim().is_empty() || char_count(&input.name) > 200 {
+        field_errors.push(field_error("name", "长度必须为 1-200 个字符"));
+    }
+    if input.year < 1900 || input.year > 2100 {
+        field_errors.push(field_error("year", "必须为 1900-2100 的整数"));
+    }
+    if char_count(&input.r#type) > 100 {
+        field_errors.push(field_error("type", "长度不能超过 100 个字符"));
+    }
+    if !PROJECT_STATUSES.contains(&input.status.as_str()) {
+        field_errors.push(field_error("status", "状态无效"));
+    }
+    if char_count(&input.phase) > 100 {
+        field_errors.push(field_error("phase", "长度不能超过 100 个字符"));
+    }
+    if char_count(&input.filing_status) > 100 {
+        field_errors.push(field_error("filingStatus", "长度不能超过 100 个字符"));
+    }
+    if !is_real_date(input.planned_completion_date.as_deref()) {
+        field_errors.push(field_error(
+            "plannedCompletionDate",
+            "必须是真实的 YYYY-MM-DD 日期或 null",
+        ));
+    }
+    if !is_real_date(input.actual_completion_date.as_deref()) {
+        field_errors.push(field_error(
+            "actualCompletionDate",
+            "必须是真实的 YYYY-MM-DD 日期或 null",
+        ));
+    }
+
+    if field_errors.is_empty() {
+        Ok(())
+    } else {
+        Err(LocalDbError::ValidationFailed { field_errors })
+    }
+}
+
+fn field_error(field: &str, message: &str) -> FieldError {
+    FieldError {
+        field: field.to_string(),
+        message: message.to_string(),
+    }
+}
+
+fn char_count(value: &str) -> usize {
+    value.chars().count()
+}
+
 fn validate_optional_date(value: Option<&str>) -> Result<(), LocalDbError> {
+    if is_real_date(value) {
+        return Ok(());
+    }
+    Err(LocalDbError::CorruptProject)
+}
+
+fn is_real_date(value: Option<&str>) -> bool {
     match value {
         Some(date)
             if date.len() == 10
@@ -312,9 +490,32 @@ fn validate_optional_date(value: Option<&str>) -> Result<(), LocalDbError> {
                     .enumerate()
                     .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit()) =>
         {
-            Ok(())
+            let year = date[0..4].parse::<i64>().ok();
+            let month = date[5..7].parse::<usize>().ok();
+            let day = date[8..10].parse::<usize>().ok();
+            match (year, month, day) {
+                (Some(year), Some(month), Some(day)) => {
+                    let days_in_month = days_in_month(year, month);
+                    days_in_month > 0 && day >= 1 && day <= days_in_month
+                }
+                _ => false,
+            }
         }
-        Some(_) => Err(LocalDbError::CorruptProject),
-        None => Ok(()),
+        Some(_) => false,
+        None => true,
     }
+}
+
+fn days_in_month(year: i64, month: usize) -> usize {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => 0,
+    }
+}
+
+fn is_leap_year(year: i64) -> bool {
+    year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 }

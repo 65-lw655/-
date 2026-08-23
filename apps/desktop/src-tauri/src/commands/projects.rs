@@ -1,7 +1,9 @@
 use tauri::State;
 
 use super::{CommandError, DesktopState};
-use crate::local_db::{LocalProjectDetails, LocalProjectPage, ProjectListFilters};
+use crate::local_db::{
+    LocalProjectDetails, LocalProjectPage, ProjectListFilters, UpdateLocalProject,
+};
 
 #[tauri::command]
 pub fn list_local_projects(
@@ -19,6 +21,18 @@ pub fn get_local_project(
     state
         .database()?
         .get_project(&project_id)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn update_local_project(
+    state: State<'_, DesktopState>,
+    project_id: String,
+    input: UpdateLocalProject,
+) -> Result<LocalProjectDetails, CommandError> {
+    state
+        .database()?
+        .update_project(&project_id, input)
         .map_err(Into::into)
 }
 
