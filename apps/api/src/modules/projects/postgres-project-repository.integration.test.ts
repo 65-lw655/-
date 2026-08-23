@@ -497,6 +497,81 @@ describe("PostgresProjectRepository", () => {
     });
   });
 
+  it("applies the later concurrent project update after the first transaction commits", async () => {
+    await withTestDatabase(async (pool) => {
+      await runMigrations(pool, migrationsDirectory);
+      const repository = new PostgresProjectRepository(pool);
+      const firstActorUserId = randomUUID();
+      const secondActorUserId = randomUUID();
+      const fixture = await createProjectFixture(repository, {
+        actorUserId: firstActorUserId,
+        ownerUserId: firstActorUserId
+      });
+      const firstLocked = deferred();
+      const releaseFirst = deferred();
+      const secondStarted = deferred();
+
+      const firstUpdate = repository.transaction(async (transaction) => {
+        await transaction.getAccess(fixture.project.id, firstActorUserId, true);
+        firstLocked.resolve();
+        await releaseFirst.promise;
+        const commitSequence = await transaction.nextCommitSequence();
+        return transaction.updateProject({
+          ...projectInputFrom(fixture.project),
+          name: "虚构并发项目（先提交）",
+          projectId: fixture.project.id,
+          actorUserId: firstActorUserId,
+          occurredAt: "2026-08-14T10:00:00.000Z",
+          commitSequence
+        });
+      });
+      await firstLocked.promise;
+
+      const secondUpdate = repository.transaction(async (transaction) => {
+        secondStarted.resolve();
+        await transaction.getAccess(
+          fixture.project.id,
+          secondActorUserId,
+          true
+        );
+        const commitSequence = await transaction.nextCommitSequence();
+        return transaction.updateProject({
+          ...projectInputFrom(fixture.project),
+          name: "虚构并发项目（后提交）",
+          projectId: fixture.project.id,
+          actorUserId: secondActorUserId,
+          occurredAt: "2026-08-14T11:00:00.000Z",
+          commitSequence
+        });
+      });
+      await secondStarted.promise;
+
+      releaseFirst.resolve();
+      const [firstResult, secondResult] = await Promise.all([
+        firstUpdate,
+        secondUpdate
+      ]);
+      const finalAccess = await repository.transaction((transaction) =>
+        transaction.getAccess(fixture.project.id, secondActorUserId, false)
+      );
+
+      expect(firstResult).toMatchObject({
+        name: "虚构并发项目（先提交）",
+        revision: 2,
+        updatedBy: firstActorUserId
+      });
+      expect(secondResult).toMatchObject({
+        name: "虚构并发项目（后提交）",
+        revision: 3,
+        updatedBy: secondActorUserId
+      });
+      expect(secondResult!.commitSequence).toBeGreaterThan(
+        firstResult!.commitSequence
+      );
+      expect(finalAccess.project).toEqual(secondResult);
+    });
+  });
+
   it("holds a target member row lock until the owning transaction commits", async () => {
     await withTestDatabase(async (pool) => {
       await runMigrations(pool, migrationsDirectory);

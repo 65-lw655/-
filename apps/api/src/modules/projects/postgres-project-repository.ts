@@ -438,17 +438,17 @@ class PostgresProjectTransaction implements ProjectTransaction {
   ): Promise<ProjectRecord | null> {
     const result = await this.client.query<ProjectRow>(
       `UPDATE projects
-          SET lifecycle = $2,
+          SET lifecycle = $2::varchar(16),
               updated_at = $4,
               updated_by = $3,
               revision = revision + 1,
               commit_sequence = $5,
               archived_at = CASE
-                WHEN $2::text = 'ARCHIVED' THEN $4::timestamptz
+                WHEN $2::varchar(16) = 'ARCHIVED' THEN $4::timestamptz
                 ELSE NULL
               END,
               archived_by = CASE
-                WHEN $2::text = 'ARCHIVED' THEN $3::uuid
+                WHEN $2::varchar(16) = 'ARCHIVED' THEN $3::uuid
                 ELSE NULL
               END
         WHERE id = $1
