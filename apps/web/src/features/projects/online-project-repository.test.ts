@@ -84,6 +84,32 @@ function createClientStub(
   };
 }
 
+function validInput(): ProjectInput {
+  return {
+    name: "城市展馆项目",
+    year: 2026,
+    type: "展览展示",
+    status: "施工中",
+    phase: "现场施工",
+    filingStatus: "待归档",
+    plannedCompletionDate: "2026-10-01",
+    actualCompletionDate: null
+  };
+}
+
+function invalidInput(): ProjectInput {
+  return {
+    name: " ",
+    year: 1800,
+    type: "展览展示",
+    status: "施工中",
+    phase: "现场施工",
+    filingStatus: "待归档",
+    plannedCompletionDate: null,
+    actualCompletionDate: null
+  };
+}
+
 describe("online-project-repository", () => {
   it("forwards list and maps owner display names", async () => {
     const filters: ProjectListFilters = { page: 2, pageSize: 20, query: "展馆" };
@@ -118,16 +144,7 @@ describe("online-project-repository", () => {
   });
 
   it("forwards updateProject once", async () => {
-    const input: ProjectInput = {
-      name: "城市展馆项目",
-      year: 2026,
-      type: "展览展示",
-      status: "施工中",
-      phase: "现场施工",
-      filingStatus: "待归档",
-      plannedCompletionDate: "2026-10-01",
-      actualCompletionDate: null
-    };
+    const input = validInput();
     const expectedDetails = projectDetails();
     const client = createClientStub({
       updateProject: vi.fn().mockResolvedValue(expectedDetails)
@@ -154,6 +171,131 @@ describe("online-project-repository", () => {
 
     await expect(repository.getProject(crypto.randomUUID())).rejects.toMatchObject(
       new ProjectRepositoryError("AUTHENTICATION_REQUIRED", "请重新登录")
+    );
+  });
+
+  it("maps list 403 to project forbidden", async () => {
+    const client = createClientStub({
+      listProjects: vi
+        .fn<ProjectsClient["listProjects"]>()
+        .mockRejectedValue(new ApiClientError(403, "FORBIDDEN", "forbidden"))
+    });
+    const repository = createOnlineProjectRepository(client);
+
+    await expect(
+      repository.listProjects({ page: 1, pageSize: 20, query: "" })
+    ).rejects.toMatchObject(
+      new ProjectRepositoryError("PROJECT_FORBIDDEN", "您没有查看项目的权限")
+    );
+  });
+
+  it("maps get 403 to project forbidden", async () => {
+    const client = createClientStub({
+      getProject: vi
+        .fn<ProjectsClient["getProject"]>()
+        .mockRejectedValue(new ApiClientError(403, "FORBIDDEN", "forbidden"))
+    });
+    const repository = createOnlineProjectRepository(client);
+
+    await expect(repository.getProject(crypto.randomUUID())).rejects.toMatchObject(
+      new ProjectRepositoryError("PROJECT_FORBIDDEN", "您没有查看此项目的权限")
+    );
+  });
+
+  it("maps get 404 to project not found", async () => {
+    const client = createClientStub({
+      getProject: vi
+        .fn<ProjectsClient["getProject"]>()
+        .mockRejectedValue(new ApiClientError(404, "NOT_FOUND", "not found"))
+    });
+    const repository = createOnlineProjectRepository(client);
+
+    await expect(repository.getProject(crypto.randomUUID())).rejects.toMatchObject(
+      new ProjectRepositoryError("PROJECT_NOT_FOUND", "项目不存在或您无权查看")
+    );
+  });
+
+  it("maps update 401 to authentication required", async () => {
+    const client = createClientStub({
+      updateProject: vi
+        .fn<ProjectsClient["updateProject"]>()
+        .mockRejectedValue(
+          new ApiClientError(401, "AUTHENTICATION_REQUIRED", "请重新登录")
+        )
+    });
+    const repository = createOnlineProjectRepository(client);
+
+    await expect(
+      repository.updateProject(crypto.randomUUID(), validInput())
+    ).rejects.toMatchObject(
+      new ProjectRepositoryError("AUTHENTICATION_REQUIRED", "请重新登录")
+    );
+  });
+
+  it("maps update 403 to project forbidden", async () => {
+    const client = createClientStub({
+      updateProject: vi
+        .fn<ProjectsClient["updateProject"]>()
+        .mockRejectedValue(new ApiClientError(403, "FORBIDDEN", "forbidden"))
+    });
+    const repository = createOnlineProjectRepository(client);
+
+    await expect(
+      repository.updateProject(crypto.randomUUID(), validInput())
+    ).rejects.toMatchObject(
+      new ProjectRepositoryError("PROJECT_FORBIDDEN", "您没有编辑项目的权限")
+    );
+  });
+
+  it("maps update validation errors to shared validation failures", async () => {
+    const client = createClientStub({
+      updateProject: vi
+        .fn<ProjectsClient["updateProject"]>()
+        .mockRejectedValue(
+          new ApiClientError(400, "VALIDATION_ERROR", "Project input is invalid")
+        )
+    });
+    const repository = createOnlineProjectRepository(client);
+
+    await expect(
+      repository.updateProject(crypto.randomUUID(), invalidInput())
+    ).rejects.toMatchObject({
+      code: "VALIDATION_FAILED",
+      message: "Project input is invalid",
+      fieldErrors: {
+        name: expect.any(String),
+        year: expect.any(String)
+      }
+    });
+  });
+
+  it("maps non-API update errors to unavailable", async () => {
+    const client = createClientStub({
+      updateProject: vi
+        .fn<ProjectsClient["updateProject"]>()
+        .mockRejectedValue(new Error("boom"))
+    });
+    const repository = createOnlineProjectRepository(client);
+
+    await expect(
+      repository.updateProject(crypto.randomUUID(), validInput())
+    ).rejects.toMatchObject(
+      new ProjectRepositoryError("UNAVAILABLE", "boom")
+    );
+  });
+
+  it("maps non-API list errors to unavailable", async () => {
+    const client = createClientStub({
+      listProjects: vi
+        .fn<ProjectsClient["listProjects"]>()
+        .mockRejectedValue(new Error("list failed"))
+    });
+    const repository = createOnlineProjectRepository(client);
+
+    await expect(
+      repository.listProjects({ page: 1, pageSize: 20, query: "" })
+    ).rejects.toMatchObject(
+      new ProjectRepositoryError("UNAVAILABLE", "list failed")
     );
   });
 });
