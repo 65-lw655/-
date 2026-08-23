@@ -1,5 +1,9 @@
 mod migrations;
 mod models;
+mod projects;
+
+#[cfg(any(test, feature = "development"))]
+pub(crate) mod fictional_seed;
 
 use std::fmt;
 use std::path::Path;
@@ -9,6 +13,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 pub use models::DeviceSettings;
+pub use projects::{LocalProjectDetails, LocalProjectPage, LocalProjectRecord, ProjectListFilters};
 
 #[cfg(test)]
 mod tests;
@@ -35,9 +40,24 @@ pub enum LocalDbError {
     Migration { version: i64 },
     #[error("local database state is corrupt")]
     CorruptState,
+    #[error("local project was not found")]
+    ProjectNotFound,
+    #[error("local project data is corrupt")]
+    CorruptProject,
 }
 
 impl LocalDbError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Open(_) => "LOCAL_DB_OPEN_FAILED",
+            Self::State(_) => "LOCAL_DB_STATE_FAILED",
+            Self::Migration { .. } => "LOCAL_DB_MIGRATION_FAILED",
+            Self::CorruptState => "LOCAL_DB_CORRUPT_STATE",
+            Self::ProjectNotFound => "PROJECT_NOT_FOUND",
+            Self::CorruptProject => "LOCAL_PROJECT_CORRUPT",
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn migration_version(&self) -> Option<i64> {
         match self {
@@ -75,6 +95,12 @@ impl LocalDatabase {
 
     pub fn device_settings(&self) -> Result<DeviceSettings, LocalDbError> {
         read_device_settings(&self.connection)
+    }
+
+    pub fn pending_outbox_count(&self) -> Result<i64, LocalDbError> {
+        self.connection
+            .query_row("SELECT COUNT(*) FROM sync_outbox", [], |row| row.get(0))
+            .map_err(LocalDbError::State)
     }
 }
 
