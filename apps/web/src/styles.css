@@ -248,6 +248,7 @@ select {
 }
 
 .primary-button:disabled,
+.secondary-button:disabled,
 .password-input__toggle:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -270,6 +271,501 @@ select {
 .authenticated-content {
   display: grid;
   gap: 20px;
+}
+
+.app-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.app-navigation [aria-current="page"] {
+  color: #ffffff;
+  background: #24272c;
+  border-color: #24272c;
+}
+
+.projects-card {
+  min-width: 0;
+  padding: 28px 32px 32px;
+  background: #ffffff;
+  border: 1px solid #dfe2e7;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(27 29 33 / 5%);
+}
+
+.projects-card__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 22px;
+}
+
+.projects-card__heading h2,
+.project-editor-dialog h3 {
+  margin: 0;
+  color: #24272c;
+  font-size: 20px;
+  font-weight: 680;
+}
+
+.projects-card__heading p {
+  margin: 8px 0 0;
+  color: #5f646c;
+  font-size: 14px;
+}
+
+.project-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(130px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.project-filters label,
+.project-editor-form label {
+  display: grid;
+  gap: 7px;
+  color: #3d424a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.project-filters input,
+.project-filters select,
+.project-editor-form input,
+.project-editor-form select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  color: #1b1d21;
+  background: #ffffff;
+  border: 1px solid #bfc5ce;
+  border-radius: 5px;
+}
+
+.project-list-state {
+  margin: 24px 0 0;
+  color: #5f646c;
+  text-align: center;
+}
+
+.project-list-state p {
+  margin: 0 0 12px;
+}
+
+.project-table-container {
+  overflow-x: auto;
+}
+
+.project-table {
+  width: 100%;
+  min-width: 940px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.project-table th,
+.project-table td {
+  padding: 11px 12px;
+  color: #3d424a;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid #e8eaed;
+}
+
+.project-table th {
+  color: #6b7078;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.project-name-button {
+  padding: 0;
+  color: #24272c;
+  font-weight: 650;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.project-name-button:hover {
+  text-decoration: underline;
+}
+
+.project-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 18px;
+  color: #5f646c;
+  font-size: 13px;
+}
+
+.project-editor-dialog {
+  width: min(100%, 720px);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 26px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 20px 48px rgb(27 29 33 / 25%);
+}
+
+.project-editor-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.project-editor-form small {
+  color: #a43535;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.project-editor-form__wide {
+  grid-column: 1 / -1;
+}
+
+.project-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.project-detail__back {
+  margin-bottom: 18px;
+}
+
+.project-detail__heading {
+  align-items: flex-start;
+}
+
+.project-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.project-detail__message {
+  margin-bottom: 18px;
+}
+
+.project-detail__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  background: #dfe2e7;
+  border: 1px solid #dfe2e7;
+  border-radius: 6px;
+}
+
+.project-detail__fields > div {
+  min-width: 0;
+  padding: 14px 16px;
+  background: #ffffff;
+}
+
+.project-detail__fields dt {
+  margin-bottom: 5px;
+  color: #6b7078;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.project-detail__fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #24272c;
+  font-size: 14px;
+}
+
+.project-detail__section {
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid #e3e5e9;
+}
+
+.project-detail__section h3 {
+  margin: 0 0 12px;
+  color: #24272c;
+  font-size: 17px;
+}
+
+.project-detail__section > p,
+.project-detail__audit-state p {
+  margin: 0 0 12px;
+  color: #5f646c;
+  font-size: 14px;
+}
+
+.project-members > h3 {
+  margin-bottom: 16px;
+}
+
+.project-members > [role="alert"] p,
+.project-members__empty,
+.project-members__feedback p,
+.project-members__add p {
+  margin: 0 0 12px;
+  color: #5f646c;
+  font-size: 14px;
+}
+
+.project-members__feedback {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: #f3f4f6;
+  border-radius: 6px;
+}
+
+.project-members__feedback--error {
+  background: #fcecec;
+}
+
+.project-members__table-container {
+  overflow-x: auto;
+}
+
+.project-members__table {
+  width: 100%;
+  min-width: 1040px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.project-members__table th,
+.project-members__table td {
+  padding: 11px 10px;
+  color: #3d424a;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #e8eaed;
+}
+
+.project-members__table th {
+  color: #6b7078;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.project-members__table td {
+  overflow-wrap: anywhere;
+}
+
+.project-members__table .secondary-button {
+  min-height: 34px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.project-members__add {
+  margin-top: 22px;
+  padding: 18px;
+  background: #f7f8f9;
+  border: 1px solid #e3e5e9;
+  border-radius: 6px;
+}
+
+.project-members__add h4 {
+  margin: 0 0 16px;
+  color: #24272c;
+  font-size: 15px;
+}
+
+.project-members__add form,
+.project-member-dialog form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.project-members__add label,
+.project-member-dialog label {
+  display: grid;
+  gap: 7px;
+  color: #3d424a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.project-members__add input,
+.project-members__add select,
+.project-members__add textarea,
+.project-member-dialog input,
+.project-member-dialog select,
+.project-member-dialog textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  color: #1b1d21;
+  background: #ffffff;
+  border: 1px solid #bfc5ce;
+  border-radius: 5px;
+}
+
+.project-members__add textarea,
+.project-member-dialog textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.project-members__wide {
+  grid-column: 1 / -1;
+}
+
+.project-members__candidates {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #dfe2e7;
+  border-radius: 5px;
+}
+
+.project-members__candidates legend {
+  padding: 0 5px;
+  color: #6b7078;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.project-members__candidates label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.project-members__candidates input {
+  width: auto;
+  min-height: 0;
+}
+
+.project-member-dialog,
+.project-member-remove-dialog {
+  width: min(100%, 620px);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 20px 48px rgb(27 29 33 / 25%);
+}
+
+.project-member-remove-dialog {
+  width: min(100%, 440px);
+}
+
+.project-member-dialog h3,
+.project-member-remove-dialog h3 {
+  margin: 0 0 18px;
+  color: #24272c;
+  font-size: 18px;
+}
+
+.project-member-dialog small {
+  color: #a43535;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.project-member-dialog form > p,
+.project-member-remove-dialog > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #5f646c;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.project-member-dialog__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.project-member-dialog__remove {
+  margin-right: auto;
+}
+
+.project-member-remove-dialog .project-editor-actions {
+  margin-top: 22px;
+}
+
+.project-audit-list {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.project-audit-list > li {
+  padding: 14px 16px;
+  border: 1px solid #dfe2e7;
+  border-radius: 6px;
+}
+
+.project-audit-list__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #24272c;
+  font-size: 13px;
+}
+
+.project-audit-list > li > p {
+  margin: 7px 0 10px;
+  color: #6b7078;
+  font-size: 12px;
+}
+
+.project-audit-list ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 20px;
+  color: #3d424a;
+  font-size: 13px;
+}
+
+.project-lifecycle-dialog {
+  width: min(100%, 440px);
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 20px 48px rgb(27 29 33 / 25%);
+}
+
+.project-lifecycle-dialog h3 {
+  margin: 0;
+  color: #24272c;
+  font-size: 18px;
+}
+
+.project-lifecycle-dialog p {
+  margin: 10px 0 22px;
+  color: #5f646c;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.project-lifecycle-dialog .project-lifecycle-dialog__error {
+  margin: -10px 0 18px;
+  color: #a43535;
 }
 
 .admin-users {
@@ -701,6 +1197,136 @@ select {
   .admin-users__heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .projects-card {
+    padding: 24px 20px;
+  }
+
+  .projects-card__heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .project-filters,
+  .project-editor-form {
+    grid-template-columns: 1fr;
+  }
+
+  .project-detail__actions {
+    justify-content: flex-start;
+  }
+
+  .project-detail__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .project-members__table-container {
+    overflow: visible;
+  }
+
+  .project-members__table {
+    min-width: 0;
+  }
+
+  .project-members__table thead {
+    display: none;
+  }
+
+  .project-members__table tbody {
+    display: grid;
+    gap: 14px;
+  }
+
+  .project-members__table tr {
+    display: grid;
+    padding: 8px 14px;
+    border: 1px solid #dfe2e7;
+    border-radius: 6px;
+  }
+
+  .project-members__table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 8px 0;
+  }
+
+  .project-members__table td::before {
+    flex: 0 0 92px;
+    color: #6b7078;
+    content: attr(data-label);
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .project-members__add form,
+  .project-member-dialog form {
+    grid-template-columns: 1fr;
+  }
+
+  .project-members__wide,
+  .project-member-dialog form > p,
+  .project-member-dialog__actions {
+    grid-column: auto;
+  }
+
+  .project-member-dialog__actions {
+    flex-wrap: wrap;
+  }
+
+  .project-audit-list__heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .project-editor-form__wide {
+    grid-column: auto;
+  }
+
+  .project-table-container {
+    overflow: visible;
+  }
+
+  .project-table {
+    min-width: 0;
+  }
+
+  .project-table thead {
+    display: none;
+  }
+
+  .project-table tbody {
+    display: grid;
+    gap: 14px;
+  }
+
+  .project-table tr {
+    display: grid;
+    padding: 8px 14px;
+    border: 1px solid #dfe2e7;
+    border-radius: 6px;
+  }
+
+  .project-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 8px 0;
+    white-space: normal;
+  }
+
+  .project-table td::before {
+    flex: 0 0 92px;
+    color: #6b7078;
+    content: attr(data-label);
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .project-name-button {
+    text-align: right;
   }
 }
 

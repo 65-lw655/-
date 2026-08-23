@@ -1,6 +1,11 @@
 export const SYSTEM_VERSION = "0.1.0" as const;
 
 export { authorizeAction } from "./auth/authorization.js";
+export * from "./projects/types.js";
+export {
+  validateMemberInput,
+  validateProjectInput
+} from "./projects/validation.js";
 export type {
   AccountStatus,
   AuthorizationAction,

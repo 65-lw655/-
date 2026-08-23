@@ -1,6 +1,9 @@
 import { SYSTEM_VERSION } from "@project-online/domain";
 import cookie from "@fastify/cookie";
-import fastify, { type FastifyInstance } from "fastify";
+import fastify, {
+  type FastifyInstance,
+  type FastifyListenOptions
+} from "fastify";
 
 import type { ApiConfig } from "./config.js";
 import {
@@ -8,6 +11,7 @@ import {
   sendApiError,
   type ApiServices
 } from "./modules/auth/routes.js";
+import { registerProjectRoutes } from "./modules/projects/routes.js";
 import { registerUserRoutes } from "./modules/users/routes.js";
 
 const healthSchema = {
@@ -28,6 +32,18 @@ const healthSchema = {
     }
   }
 } as const;
+
+export async function listenWithCleanup(
+  app: FastifyInstance,
+  options: FastifyListenOptions
+): Promise<string> {
+  try {
+    return await app.listen(options);
+  } catch (error) {
+    await app.close().catch(() => undefined);
+    throw error;
+  }
+}
 
 export function buildApp(
   config: ApiConfig,
@@ -90,6 +106,10 @@ export function buildApp(
   if (services !== undefined) {
     registerAuthRoutes(app, config, services);
     registerUserRoutes(app, config, services);
+    registerProjectRoutes(app, config, services);
+    if (services.close !== undefined) {
+      app.addHook("onClose", services.close);
+    }
   }
 
   return app;

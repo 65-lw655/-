@@ -24,6 +24,7 @@ import {
 } from "./features/auth/auth-client.js";
 import { LoginView } from "./features/auth/LoginView.js";
 import { SetPasswordView } from "./features/auth/SetPasswordView.js";
+import { ProjectsView } from "./features/projects/ProjectsView.js";
 import { checkApiHealth } from "./health-client.js";
 
 type ApiStatus =
@@ -42,6 +43,7 @@ type SessionState =
   | { kind: "sessionExpired" };
 
 type AuthEntryMode = "login" | "activate" | "reset";
+type AuthenticatedView = "projects" | "account" | "admin-users";
 
 interface ApiCheck {
   apiBaseUrl: string;
@@ -119,6 +121,8 @@ export function App({
   );
   const [session, setSession] = useState<SessionState>({ kind: "checking" });
   const [authEntryMode, setAuthEntryMode] = useState<AuthEntryMode>("login");
+  const [authenticatedView, setAuthenticatedView] =
+    useState<AuthenticatedView>("projects");
   const [apiCheck, setApiCheck] = useState<ApiCheck>({
     apiBaseUrl: "",
     status: CHECKING_STATUS
@@ -201,6 +205,7 @@ export function App({
 
     await authClient.login(username, password);
     const user = await authClient.getSession();
+    setAuthenticatedView("projects");
     setSession(user ? { kind: "authenticated", user } : { kind: "anonymous" });
   }
 
@@ -371,12 +376,59 @@ export function App({
         ) : null}
         {authenticated ? (
           <section className="authenticated-content">
-            <AccountView
-              user={currentSession.user}
-              onChangePassword={handleChangePassword}
-              onLogout={() => void handleLogout()}
-            />
-            {currentSession.user.role === "ADMIN" && config.ok ? (
+            <nav className="app-navigation" aria-label="主导航">
+              <button
+                aria-current={
+                  authenticatedView === "projects" ? "page" : undefined
+                }
+                className="secondary-button"
+                onClick={() => setAuthenticatedView("projects")}
+                type="button"
+              >
+                项目
+              </button>
+              <button
+                aria-current={
+                  authenticatedView === "account" ? "page" : undefined
+                }
+                className="secondary-button"
+                onClick={() => setAuthenticatedView("account")}
+                type="button"
+              >
+                账户
+              </button>
+              {currentSession.user.role === "ADMIN" ? (
+                <button
+                  aria-current={
+                    authenticatedView === "admin-users" ? "page" : undefined
+                  }
+                  className="secondary-button"
+                  onClick={() => setAuthenticatedView("admin-users")}
+                  type="button"
+                >
+                  用户管理
+                </button>
+              ) : null}
+            </nav>
+            {authenticatedView === "projects" && config.ok ? (
+              <ProjectsView
+                apiBaseUrl={config.apiBaseUrl}
+                fetchImpl={fetchImpl}
+                onOpenProject={() => undefined}
+                onSessionExpired={handleSessionExpired}
+                sessionUser={currentSession.user}
+              />
+            ) : null}
+            {authenticatedView === "account" ? (
+              <AccountView
+                user={currentSession.user}
+                onChangePassword={handleChangePassword}
+                onLogout={() => void handleLogout()}
+              />
+            ) : null}
+            {authenticatedView === "admin-users" &&
+            currentSession.user.role === "ADMIN" &&
+            config.ok ? (
               <AdminUsersView
                 apiBaseUrl={config.apiBaseUrl}
                 fetchImpl={fetchImpl}
