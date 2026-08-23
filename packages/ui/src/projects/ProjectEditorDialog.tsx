@@ -1,8 +1,4 @@
 import {
-  ProjectEditorDialog as SharedProjectEditorDialog,
-  ProjectRepositoryError
-} from "@project-online/ui";
-import {
   PROJECT_STATUSES,
   validateProjectInput,
   type ProjectInput,
@@ -17,25 +13,20 @@ import {
   type KeyboardEvent
 } from "react";
 
-import { ApiClientError } from "../../api-client.js";
-import type {
-  MemberCandidate,
-  ProjectDetails,
-  ProjectsClient
-} from "./projects-client.js";
+import {
+  ProjectRepositoryError,
+  type ProjectDetails,
+  type ProjectRepository
+} from "./repository.js";
 
-interface SharedProps {
-  client: ProjectsClient;
+export interface ProjectEditorDialogProps {
+  details: ProjectDetails;
+  repository: ProjectRepository;
   onClose(): void;
   onSaved(details: ProjectDetails): void;
-  onSessionExpired(): void;
+  onAuthenticationRequired?(): void;
+  submitLabel?: string;
 }
-
-type ProjectEditorDialogProps = SharedProps &
-  (
-    | { mode: "create"; project?: never }
-    | { mode: "edit"; project: ProjectRecord }
-  );
 
 interface ProjectFormState {
   name: string;
@@ -48,16 +39,16 @@ interface ProjectFormState {
   actualCompletionDate: string;
 }
 
-function initialForm(): ProjectFormState {
+function initialForm(project: ProjectRecord): ProjectFormState {
   return {
-    name: "",
-    year: "",
-    type: "",
-    status: PROJECT_STATUSES[0],
-    phase: "",
-    filingStatus: "",
-    plannedCompletionDate: "",
-    actualCompletionDate: ""
+    name: project.name,
+    year: String(project.year),
+    type: project.type,
+    status: project.status,
+    phase: project.phase,
+    filingStatus: project.filingStatus,
+    plannedCompletionDate: project.plannedCompletionDate ?? "",
+    actualCompletionDate: project.actualCompletionDate ?? ""
   };
 }
 
@@ -74,25 +65,6 @@ function toProjectInput(form: ProjectFormState): ProjectInput {
   };
 }
 
-function isSessionExpired(error: unknown): boolean {
-  return (
-    error instanceof ApiClientError &&
-    error.status === 401 &&
-    (error.code === "SESSION_EXPIRED" ||
-      error.code === "AUTHENTICATION_REQUIRED")
-  );
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiClientError && error.status === 403) {
-    return "您没有编辑项目的权限";
-  }
-
-  return error instanceof ApiClientError
-    ? error.message
-    : "项目保存失败，请重试";
-}
-
 function focusableControls(dialog: HTMLElement): HTMLElement[] {
   return Array.from(
     dialog.querySelectorAll<HTMLElement>(
@@ -101,94 +73,37 @@ function focusableControls(dialog: HTMLElement): HTMLElement[] {
   );
 }
 
-function mapRepositoryError(error: unknown): unknown {
-  if (!(error instanceof ApiClientError)) {
-    return error;
+function errorMessage(error: unknown): string {
+  if (!(error instanceof ProjectRepositoryError)) {
+    return "项目保存失败，请重试";
   }
-  if (
-    error.status === 401 &&
-    (error.code === "SESSION_EXPIRED" ||
-      error.code === "AUTHENTICATION_REQUIRED")
-  ) {
-    return new ProjectRepositoryError("AUTHENTICATION_REQUIRED", "请重新登录", {
-      cause: error
-    });
+  if (error.code === "PROJECT_FORBIDDEN") {
+    return "您没有编辑项目的权限";
   }
-  if (error.status === 403) {
-    return new ProjectRepositoryError("PROJECT_FORBIDDEN", "您没有编辑项目的权限", {
-      cause: error
-    });
-  }
-  return new ProjectRepositoryError("UNAVAILABLE", error.message, {
-    cause: error
-  });
+  return error.message;
 }
 
-export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
-  if (props.mode === "edit") {
-    return (
-      <SharedProjectEditorDialog
-        details={{
-          project: props.project,
-          permissions: {
-            canEdit: true,
-            canManageMembers: false,
-            canChangeLifecycle: false,
-            canReadAudit: false
-          }
-        }}
-        onAuthenticationRequired={props.onSessionExpired}
-        onClose={props.onClose}
-        onSaved={props.onSaved}
-        repository={{
-          listProjects: async (filters) => {
-            const page = await props.client.listProjects(filters);
-            return {
-              ...page,
-              items: page.items.map(({ owners, ...item }) => ({
-                ...item,
-                ownerLabels: owners.map(({ displayName }) => displayName)
-              }))
-            };
-          },
-          getProject: async (projectId) => props.client.getProject(projectId),
-          updateProject: async (projectId, input) => {
-            try {
-              return await props.client.updateProject(projectId, input);
-            } catch (error) {
-              throw mapRepositoryError(error);
-            }
-          }
-        }}
-        submitLabel="保存修改"
-      />
-    );
-  }
-
-  return <CreateProjectEditorDialog {...props} />;
-}
-
-function CreateProjectEditorDialog({
-  client,
+export function ProjectEditorDialog({
+  details,
+  repository,
   onClose,
   onSaved,
-  onSessionExpired
-}: SharedProps) {
-  const [form, setForm] = useState<ProjectFormState>(initialForm);
-  const [owners, setOwners] = useState<MemberCandidate[]>([]);
-  const [ownerUserId, setOwnerUserId] = useState("");
-  const [loadingOwners, setLoadingOwners] = useState(true);
+  onAuthenticationRequired,
+  submitLabel = "保存项目"
+}: ProjectEditorDialogProps) {
+  const [form, setForm] = useState<ProjectFormState>(() =>
+    initialForm(details.project)
+  );
   const [fieldErrors, setFieldErrors] = useState<
     Readonly<Record<string, string>>
   >({});
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const ownersRequest = useRef<Promise<MemberCandidate[]> | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
   const mounted = useRef(false);
   const submissionRequest = useRef(0);
   const submissionLocked = useRef(false);
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     mounted.current = true;
@@ -196,7 +111,6 @@ function CreateProjectEditorDialog({
       triggerRef.current ??= document.activeElement;
     }
     focusableControls(dialogRef.current!)[0]?.focus();
-
     return () => {
       mounted.current = false;
       submissionRequest.current += 1;
@@ -206,37 +120,6 @@ function CreateProjectEditorDialog({
     };
   }, []);
 
-  useEffect(() => {
-    ownersRequest.current ??= client.listInitialOwnerCandidates();
-
-    let active = true;
-    void ownersRequest.current
-      .then((candidates) => {
-        if (active) {
-          setOwners(candidates);
-        }
-      })
-      .catch((loadError: unknown) => {
-        if (!active) {
-          return;
-        }
-        if (isSessionExpired(loadError)) {
-          onSessionExpired();
-          return;
-        }
-        setError(errorMessage(loadError));
-      })
-      .finally(() => {
-        if (active) {
-          setLoadingOwners(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [client, onSessionExpired]);
-
   function updateField<Key extends keyof ProjectFormState>(
     key: Key,
     value: ProjectFormState[Key]
@@ -244,9 +127,7 @@ function CreateProjectEditorDialog({
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>
-  ): Promise<void> {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submissionLocked.current) {
       return;
@@ -260,12 +141,6 @@ function CreateProjectEditorDialog({
       return;
     }
 
-    if (ownerUserId === "") {
-      setFieldErrors({ ownerUserId: "请选择首位负责人" });
-      setError("");
-      return;
-    }
-
     submissionLocked.current = true;
     const requestId = ++submissionRequest.current;
     setIsSubmitting(true);
@@ -273,7 +148,7 @@ function CreateProjectEditorDialog({
     setError("");
 
     try {
-      const saved = await client.createProject({ project: input, ownerUserId });
+      const saved = await repository.updateProject(details.project.id, input);
       if (!mounted.current || submissionRequest.current !== requestId) {
         return;
       }
@@ -285,11 +160,24 @@ function CreateProjectEditorDialog({
       if (!mounted.current || submissionRequest.current !== requestId) {
         return;
       }
-      if (isSessionExpired(saveError)) {
-        onSessionExpired();
-      } else {
-        setError(errorMessage(saveError));
+      if (
+        saveError instanceof ProjectRepositoryError &&
+        saveError.code === "AUTHENTICATION_REQUIRED"
+      ) {
+        onAuthenticationRequired?.();
+        return;
       }
+
+      if (
+        saveError instanceof ProjectRepositoryError &&
+        saveError.code === "VALIDATION_FAILED"
+      ) {
+        setFieldErrors(saveError.fieldErrors ?? {});
+        setError("");
+        return;
+      }
+
+      setError(errorMessage(saveError));
     } finally {
       if (mounted.current && submissionRequest.current === requestId) {
         submissionLocked.current = false;
@@ -300,9 +188,8 @@ function CreateProjectEditorDialog({
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      if (!isSubmitting && !submissionLocked.current) {
+      if (!isSubmitting) {
+        event.preventDefault();
         onClose();
       }
       return;
@@ -347,11 +234,12 @@ function CreateProjectEditorDialog({
         ref={dialogRef}
         role="dialog"
       >
-        <h3 id="project-editor-title">新建项目</h3>
+        <h3 id="project-editor-title">编辑项目</h3>
         <form className="project-editor-form" onSubmit={handleSubmit}>
           <label>
             <span>项目名称</span>
             <input
+              aria-label="项目名称"
               aria-invalid={fieldErrors.name === undefined ? undefined : true}
               disabled={isSubmitting}
               onChange={(event) => updateField("name", event.target.value)}
@@ -362,6 +250,7 @@ function CreateProjectEditorDialog({
           <label>
             <span>年度</span>
             <input
+              aria-label="年度"
               aria-invalid={fieldErrors.year === undefined ? undefined : true}
               disabled={isSubmitting}
               onChange={(event) => updateField("year", event.target.value)}
@@ -373,6 +262,7 @@ function CreateProjectEditorDialog({
           <label>
             <span>类型</span>
             <input
+              aria-label="类型"
               disabled={isSubmitting}
               onChange={(event) => updateField("type", event.target.value)}
               value={form.type}
@@ -382,6 +272,7 @@ function CreateProjectEditorDialog({
           <label>
             <span>状态</span>
             <select
+              aria-label="状态"
               disabled={isSubmitting}
               onChange={(event) =>
                 updateField("status", event.target.value as ProjectStatus)
@@ -398,6 +289,7 @@ function CreateProjectEditorDialog({
           <label>
             <span>阶段</span>
             <input
+              aria-label="阶段"
               disabled={isSubmitting}
               onChange={(event) => updateField("phase", event.target.value)}
               value={form.phase}
@@ -407,6 +299,7 @@ function CreateProjectEditorDialog({
           <label>
             <span>归档状态</span>
             <input
+              aria-label="归档状态"
               disabled={isSubmitting}
               onChange={(event) =>
                 updateField("filingStatus", event.target.value)
@@ -420,6 +313,7 @@ function CreateProjectEditorDialog({
           <label>
             <span>计划完成日期</span>
             <input
+              aria-label="计划完成日期"
               disabled={isSubmitting}
               onChange={(event) =>
                 updateField("plannedCompletionDate", event.target.value)
@@ -434,6 +328,7 @@ function CreateProjectEditorDialog({
           <label>
             <span>实际完成日期</span>
             <input
+              aria-label="实际完成日期"
               disabled={isSubmitting}
               onChange={(event) =>
                 updateField("actualCompletionDate", event.target.value)
@@ -443,30 +338,6 @@ function CreateProjectEditorDialog({
             />
             {fieldErrors.actualCompletionDate ? (
               <small>{fieldErrors.actualCompletionDate}</small>
-            ) : null}
-          </label>
-          <label className="project-editor-form__wide">
-            <span>首位负责人</span>
-            <select
-              aria-label="首位负责人"
-              aria-invalid={
-                fieldErrors.ownerUserId === undefined ? undefined : true
-              }
-              disabled={isSubmitting || loadingOwners}
-              onChange={(event) => setOwnerUserId(event.target.value)}
-              value={ownerUserId}
-            >
-              <option value="">
-                {loadingOwners ? "正在加载负责人" : "请选择负责人"}
-              </option>
-              {owners.map((owner) => (
-                <option key={owner.id} value={owner.id}>
-                  {owner.displayName}（{owner.username}）
-                </option>
-              ))}
-            </select>
-            {fieldErrors.ownerUserId ? (
-              <small role="alert">{fieldErrors.ownerUserId}</small>
             ) : null}
           </label>
           {error ? (
@@ -485,10 +356,10 @@ function CreateProjectEditorDialog({
             </button>
             <button
               className="primary-button"
-              disabled={isSubmitting || loadingOwners}
+              disabled={isSubmitting}
               type="submit"
             >
-              {isSubmitting ? "创建中" : "创建项目"}
+              {isSubmitting ? "保存中" : submitLabel}
             </button>
           </div>
         </form>
