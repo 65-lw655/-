@@ -149,6 +149,36 @@ describe("DesktopApp", () => {
     expect(bridge.updateProject).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the saved project visible when pending count refresh fails after saving", async () => {
+    const bridge = bridgeStub({
+      getLocalStatus: vi
+        .fn()
+        .mockResolvedValueOnce({
+          deviceId: "00000000-0000-4000-8000-0000000000d5",
+          pendingCount: 0
+        })
+        .mockRejectedValueOnce(new Error("status refresh failed"))
+    });
+
+    render(<DesktopApp bridge={bridge} />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "示例-离线本地项目" })
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "编辑项目" }));
+    fireEvent.change(screen.getByLabelText("项目名称"), {
+      target: { value: "示例-已本地编辑项目" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存到本机" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "示例-已本地编辑项目" })
+    ).toBeVisible();
+    expect(screen.queryByText("项目保存失败，请重试")).not.toBeInTheDocument();
+    expect(screen.getByText("1 项修改待同步")).toBeVisible();
+    expect(bridge.getLocalStatus).toHaveBeenCalledTimes(2);
+  });
+
   it("remounts against the same bridge state with the edited local value", async () => {
     const bridge = bridgeStub();
     const { unmount } = render(<DesktopApp bridge={bridge} />);

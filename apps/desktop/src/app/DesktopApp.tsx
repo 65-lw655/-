@@ -46,8 +46,16 @@ export function DesktopApp({ bridge = desktopBridge }: DesktopAppProps) {
           projectId,
           input
         );
-        const loadedStatus = await bridge.getLocalStatus();
-        setStatus(loadedStatus);
+        try {
+          const loadedStatus = await bridge.getLocalStatus();
+          setStatus(loadedStatus);
+        } catch {
+          setStatus((current) =>
+            current === null
+              ? current
+              : { ...current, pendingCount: current.pendingCount + 1 }
+          );
+        }
         setRefreshToken((value) => value + 1);
         return updatedDetails;
       }

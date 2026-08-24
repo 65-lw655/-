@@ -345,7 +345,15 @@ M4 桌面端使用 Tauri 2、Rust stable、Vite 和 React。首次运行前需�
 常用命令：
 
 ```bash
+# 仅启动桌面前端 Vite 开发服务器，不启动 Tauri/Rust 桌面壳
 npm run dev --workspace @project-online/desktop
+
+# 启动 Tauri 桌面应用，会同时启动 Rust 侧
+npm run tauri --workspace @project-online/desktop -- dev
+
+# 如需验收虚构本机项目种子，使用 development feature 暴露开发种子命令
+npm run tauri --workspace @project-online/desktop -- dev --features development
+
 npm run test -- --run apps/desktop
 npm run typecheck --workspace @project-online/desktop
 npm run build:web --workspace @project-online/desktop
