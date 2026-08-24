@@ -4,7 +4,7 @@ import {
   ProjectListView,
   type ProjectRepository
 } from "@project-online/ui";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   desktopBridge,
@@ -29,15 +29,11 @@ const initialFilters: ProjectListFilters = {
 export function DesktopApp({ bridge = desktopBridge }: DesktopAppProps) {
   const [startupState, setStartupState] = useState<StartupState>("preparing");
   const [status, setStatus] = useState<LocalStatus | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+    null
+  );
   const [filters, setFilters] = useState<ProjectListFilters>(initialFilters);
   const [refreshToken, setRefreshToken] = useState(0);
-
-  const refreshStatus = useCallback(async () => {
-    const loadedStatus = await bridge.getLocalStatus();
-    setStatus(loadedStatus);
-    return loadedStatus;
-  }, [bridge]);
 
   const repository: ProjectRepository = useMemo(() => {
     const localRepository = createLocalProjectRepository(bridge);
@@ -46,33 +42,44 @@ export function DesktopApp({ bridge = desktopBridge }: DesktopAppProps) {
       listProjects: localRepository.listProjects,
       getProject: localRepository.getProject,
       updateProject: async (projectId, input) => {
-        const updatedDetails = await localRepository.updateProject(projectId, input);
-        await refreshStatus();
+        const updatedDetails = await localRepository.updateProject(
+          projectId,
+          input
+        );
+        const loadedStatus = await bridge.getLocalStatus();
+        setStatus(loadedStatus);
         setRefreshToken((value) => value + 1);
         return updatedDetails;
       }
     };
-  }, [bridge, refreshStatus]);
+  }, [bridge]);
 
   useEffect(() => {
     let active = true;
 
-    void refreshStatus()
-      .then(() => {
-        if (active) {
-          setStartupState("ready");
+    void bridge
+      .getLocalStatus()
+      .then((loadedStatus) => {
+        if (!active) {
+          return;
         }
+        setStatus(loadedStatus);
+        setStartupState("ready");
+      })
+      .then(() => {
+        return undefined;
       })
       .catch(() => {
-        if (active) {
-          setStartupState("blocked");
+        if (!active) {
+          return;
         }
+        setStartupState("blocked");
       });
 
     return () => {
       active = false;
     };
-  }, [refreshStatus]);
+  }, [bridge]);
 
   return (
     <main className="desktop-shell">

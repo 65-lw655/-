@@ -11,10 +11,7 @@ import type { ProjectDetails, ProjectPage } from "@project-online/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DesktopApp } from "./DesktopApp.js";
-import type {
-  DesktopBridge,
-  LocalStatus
-} from "../platform/desktop-bridge.js";
+import type { DesktopBridge, LocalStatus } from "../platform/desktop-bridge.js";
 
 const projectId = "00000000-0000-4000-8000-0000000000f5";
 
@@ -132,8 +129,12 @@ describe("DesktopApp", () => {
 
     render(<DesktopApp bridge={bridge} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "示例-离线本地项目" }));
-    expect(await screen.findByRole("heading", { name: "示例-离线本地项目" })).toBeVisible();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "示例-离线本地项目" })
+    );
+    expect(
+      await screen.findByRole("heading", { name: "示例-离线本地项目" })
+    ).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "编辑项目" }));
     fireEvent.change(screen.getByLabelText("项目名称"), {
@@ -141,7 +142,9 @@ describe("DesktopApp", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "保存到本机" }));
 
-    expect(await screen.findByRole("heading", { name: "示例-已本地编辑项目" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "示例-已本地编辑项目" })
+    ).toBeVisible();
     expect(screen.getByText("1 项修改待同步")).toBeVisible();
     expect(bridge.updateProject).toHaveBeenCalledTimes(1);
   });
@@ -150,7 +153,9 @@ describe("DesktopApp", () => {
     const bridge = bridgeStub();
     const { unmount } = render(<DesktopApp bridge={bridge} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "示例-离线本地项目" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "示例-离线本地项目" })
+    );
     fireEvent.click(await screen.findByRole("button", { name: "编辑项目" }));
     fireEvent.change(screen.getByLabelText("项目名称"), {
       target: { value: "示例-已本地编辑项目" }
