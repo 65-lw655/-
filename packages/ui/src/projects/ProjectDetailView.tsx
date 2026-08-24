@@ -27,8 +27,7 @@ export interface ProjectDetailViewRenderContext {
 }
 
 type ProjectDetailViewSlot =
-  | ReactNode
-  | ((context: ProjectDetailViewRenderContext) => ReactNode);
+  ReactNode | ((context: ProjectDetailViewRenderContext) => ReactNode);
 
 const detailFields: ReadonlyArray<{
   key: keyof Pick<

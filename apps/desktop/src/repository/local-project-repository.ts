@@ -1,4 +1,7 @@
-import { ProjectRepositoryError, type ProjectRepository } from "@project-online/ui";
+import {
+  ProjectRepositoryError,
+  type ProjectRepository
+} from "@project-online/ui";
 
 import type { DesktopBridge } from "../platform/desktop-bridge.js";
 
@@ -16,7 +19,10 @@ function unavailableMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-function mapReadError(error: unknown, fallback: string): ProjectRepositoryError {
+function mapReadError(
+  error: unknown,
+  fallback: string
+): ProjectRepositoryError {
   if (isCommandError(error) && error.code === "PROJECT_NOT_FOUND") {
     return new ProjectRepositoryError(
       "PROJECT_NOT_FOUND",
@@ -25,14 +31,18 @@ function mapReadError(error: unknown, fallback: string): ProjectRepositoryError 
     );
   }
 
-  return new ProjectRepositoryError("UNAVAILABLE", unavailableMessage(error, fallback), {
-    cause: error
-  });
+  return new ProjectRepositoryError(
+    "UNAVAILABLE",
+    unavailableMessage(error, fallback),
+    {
+      cause: error
+    }
+  );
 }
 
-function fieldErrorsFrom(error: DesktopCommandError):
-  | Readonly<Record<string, string>>
-  | undefined {
+function fieldErrorsFrom(
+  error: DesktopCommandError
+): Readonly<Record<string, string>> | undefined {
   if (
     typeof error.fieldErrors !== "object" ||
     error.fieldErrors === null ||

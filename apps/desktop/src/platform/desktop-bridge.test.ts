@@ -8,9 +8,9 @@ function invokeReturning(value: unknown): {
   invoke: Invoke;
   spy: ReturnType<typeof vi.fn>;
 } {
-  const spy = vi.fn((command: string, args?: Record<string, unknown>) =>
-    Promise.resolve(value)
-  );
+  const spy = vi.fn<
+    (command: string, args?: Record<string, unknown>) => Promise<unknown>
+  >(() => Promise.resolve(value));
   return {
     invoke: <T>(command: string, args?: Record<string, unknown>) =>
       (args === undefined ? spy(command) : spy(command, args)) as Promise<T>,

@@ -7,18 +7,20 @@ import {
 import {
   PROJECT_AUDIT_VALUE_FIELDS,
   type ProjectAuditField,
-  type ProjectAuditValueField,
-  type ProjectRecord
+  type ProjectAuditValueField
 } from "@project-online/domain";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent
+} from "react";
 
 import { ApiClientError } from "../../api-client.js";
 import { ProjectMembersPanel } from "./ProjectMembersPanel.js";
 import { createOnlineProjectRepository } from "./online-project-repository.js";
-import type {
-  ProjectAuditView,
-  ProjectsClient
-} from "./projects-client.js";
+import type { ProjectAuditView, ProjectsClient } from "./projects-client.js";
 
 export interface ProjectDetailViewProps {
   projectId: string;
@@ -92,7 +94,11 @@ function focusableControls(dialog: HTMLElement): HTMLElement[] {
   );
 }
 
-export function ProjectDetailView({
+export function ProjectDetailView(props: ProjectDetailViewProps) {
+  return <ProjectDetailViewContent key={props.projectId} {...props} />;
+}
+
+function ProjectDetailViewContent({
   projectId,
   client,
   repository,
@@ -129,24 +135,6 @@ export function ProjectDetailView({
       mounted.current = false;
     };
   }, []);
-
-  useEffect(() => {
-    currentProjectId.current = projectId;
-    lifecycleLocked.current = false;
-    auditLocked.current = false;
-    auditRequestId.current += 1;
-    auditOpenRef.current = false;
-    setLifecycleAction(null);
-    setLifecycleSubmitting(false);
-    setLifecycleError("");
-    setAuditOpen(false);
-    setAuditItems([]);
-    setAuditPage(0);
-    setAuditTotal(0);
-    setAuditLoading(false);
-    setAuditError(null);
-    setMembersBusy(false);
-  }, [projectId]);
 
   useEffect(() => {
     if (lifecycleAction === null) {
@@ -499,9 +487,11 @@ export function ProjectDetailView({
                         </ul>
                       </li>
                     ))}
-                    </ol>
+                  </ol>
                 ) : null}
-                {!auditLoading && auditError === null && auditItems.length === 0 ? (
+                {!auditLoading &&
+                auditError === null &&
+                auditItems.length === 0 ? (
                   <p>暂无审计记录</p>
                 ) : null}
                 {auditError === "more-failed" ? (
@@ -566,7 +556,9 @@ export function ProjectDetailView({
                       onClick={() => void confirmLifecycle(context)}
                       type="button"
                     >
-                      {lifecycleSubmitting ? `${actionLabel}中` : `确认${actionLabel}`}
+                      {lifecycleSubmitting
+                        ? `${actionLabel}中`
+                        : `确认${actionLabel}`}
                     </button>
                   </div>
                 </div>

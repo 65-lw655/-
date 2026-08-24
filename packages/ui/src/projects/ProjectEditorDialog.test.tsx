@@ -124,13 +124,11 @@ describe("ProjectEditorDialog", () => {
         )
     );
     const validationRepository = createRepository(
-      vi
-        .fn<ProjectRepository["updateProject"]>()
-        .mockRejectedValue(
-          new ProjectRepositoryError("VALIDATION_FAILED", "字段校验失败", {
-            fieldErrors: { name: "项目名称不能为空" }
-          })
-        )
+      vi.fn<ProjectRepository["updateProject"]>().mockRejectedValue(
+        new ProjectRepositoryError("VALIDATION_FAILED", "字段校验失败", {
+          fieldErrors: { name: "项目名称不能为空" }
+        })
+      )
     );
 
     const { rerender } = render(
@@ -143,9 +141,7 @@ describe("ProjectEditorDialog", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "保存项目" }));
-    expect(
-      await screen.findByText("您没有编辑项目的权限")
-    ).toBeVisible();
+    expect(await screen.findByText("您没有编辑项目的权限")).toBeVisible();
 
     rerender(
       <ProjectEditorDialog
@@ -158,7 +154,9 @@ describe("ProjectEditorDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "保存项目" }));
     expect(await screen.findByText("项目名称不能为空")).toBeVisible();
-    expect(screen.getByRole("dialog", { name: "编辑项目" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "编辑项目" })
+    ).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.queryByText("离线状态导致保存失败")).toBeNull();
   });

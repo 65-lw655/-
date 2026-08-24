@@ -2,7 +2,7 @@
 
 面向企业内部项目经营管理的线上系统。系统同时提供浏览器、macOS 桌面端和 Windows 桌面端，支持多人按权限访问项目，并允许桌面端在断网时继续编辑、恢复网络后自动同步。
 
-> 当前状态：M2 账号与权限闭环、M3 项目核心在线纵向切片已完成。M3 已通过非数据库自动化验证、隔离 PostgreSQL 16 迁移与集成测试，并使用虚构角色和“示例-”项目完成 Web 角色流程验收。该结论限于开发与隔离测试环境；生产认证仓储、部署账号权限和生产启动放在后续部署里程碑。
+> 当前状态：M2 账号与权限闭环、M3 项目核心在线纵向切片已完成；M4 桌面离线基础开发和本地验收门禁已完成，macOS 本机 debug 构建通过，Windows CI 门禁已配置待 GitHub Actions 实跑确认。M4 仅包含本机项目缓存读取、离线编辑、SQLite Outbox 持久化和系统凭证适配；M5 同步上传、拉取、重试和冲突处理尚未实现。上述结论限于开发与隔离测试环境；生产认证仓储、部署账号权限、签名安装包和生产启动放在后续里程碑。
 
 ## 一、建设目标
 
@@ -374,6 +374,17 @@ npm run verify
 ```
 
 该命令依次执行 lint、格式检查、类型检查、非数据库测试和全部工作区构建。`npm run test:db` 必须使用与开发库分离、允许创建和删除临时 schema 的隔离测试数据库；先将 `TEST_DATABASE_URL` 设为该测试库的占位地址对应本机值，再单独执行：
+
+桌面端 M4 门禁可单独执行：
+
+```bash
+npm run verify:desktop
+cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml
+cargo clippy --locked --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings
+npm run build:desktop --workspace @project-online/desktop
+```
+
+`verify:desktop` 会检查桌面平台配置、桌面前端测试、共享项目 UI 测试、桌面类型检查和桌面 Web 构建；GitHub Actions 的 `desktop-verify.yml` 在 macOS 与 Windows 上执行同一门禁、Rust 测试、Clippy 和 Tauri debug no-bundle 构建。
 
 ```bash
 export TEST_DATABASE_URL="<isolated-test-database-url>"

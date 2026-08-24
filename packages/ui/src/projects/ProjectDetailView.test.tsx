@@ -95,6 +95,8 @@ describe("ProjectDetailView", () => {
       />
     );
 
-    expect(await screen.findByRole("button", { name: "编辑项目" })).toBeVisible();
+    expect(
+      await screen.findByRole("button", { name: "编辑项目" })
+    ).toBeVisible();
   });
 });

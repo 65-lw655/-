@@ -41,9 +41,7 @@ function parseLifecycle(value: string): ProjectLifecycle | undefined {
   return LIFECYCLES.find((lifecycle) => lifecycle === value);
 }
 
-function listError(
-  error: unknown
-): "authentication" | "forbidden" | "failed" {
+function listError(error: unknown): "authentication" | "forbidden" | "failed" {
   if (!(error instanceof ProjectRepositoryError)) {
     return "failed";
   }
@@ -128,7 +126,8 @@ export function ProjectListView({
     filters.year !== undefined ||
     filters.status !== undefined ||
     filters.lifecycle !== undefined;
-  const canGoNext = page !== null && filters.page * filters.pageSize < page.total;
+  const canGoNext =
+    page !== null && filters.page * filters.pageSize < page.total;
 
   return (
     <section className="projects-card" aria-labelledby="projects-title">
@@ -272,7 +271,10 @@ export function ProjectListView({
         </div>
       ) : null}
 
-      {!loading && error === null && page !== null && page.total > filters.pageSize ? (
+      {!loading &&
+      error === null &&
+      page !== null &&
+      page.total > filters.pageSize ? (
         <div className="project-pagination" aria-label="项目分页">
           <button
             className="secondary-button"

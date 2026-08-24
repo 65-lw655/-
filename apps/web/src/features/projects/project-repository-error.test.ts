@@ -1,4 +1,7 @@
-import { validateProjectInput, type ProjectInput } from "@project-online/domain";
+import {
+  validateProjectInput,
+  type ProjectInput
+} from "@project-online/domain";
 import { ProjectRepositoryError } from "@project-online/ui";
 import { describe, expect, it } from "vitest";
 

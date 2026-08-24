@@ -259,14 +259,14 @@ npm run build
 - `apps/desktop/src/repository/`
 - `apps/desktop/src/features/sync-status/`
 
-- [ ] 初始化 Tauri 桌面工程并复用共享 UI。
-- [ ] 分离 macOS、Windows 和 Web 平台能力接口。
-- [ ] 建立 SQLite 迁移和版本记录机制。
-- [ ] 定义 `ProjectRepository`，分别实现在线和本地适配器。
-- [ ] 本地业务写入与待同步操作在同一事务完成。
-- [ ] macOS 凭证保存到 Keychain。
-- [ ] Windows 凭证保存到 Credential Manager。
-- [ ] 完成无网络启动、离线项目查看和离线项目编辑。
+- [x] 初始化 Tauri 桌面工程并复用共享 UI。
+- [x] 分离 macOS、Windows 和 Web 平台能力接口。
+- [x] 建立 SQLite 迁移和版本记录机制。
+- [x] 定义 `ProjectRepository`，分别实现在线和本地适配器。
+- [x] 本地业务写入与待同步操作在同一事务完成。
+- [x] macOS 凭证保存到 Keychain。
+- [x] Windows 凭证保存到 Credential Manager。
+- [x] 完成无网络启动、离线项目查看和离线项目编辑。
 - [ ] 建立 macOS 与 Windows 构建验证。
 - [ ] 确认 Windows 包不包含待办系统集成代码和权限。
 

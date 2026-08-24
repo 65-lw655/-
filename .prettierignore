@@ -2,6 +2,7 @@ node_modules
 dist
 coverage
 .worktrees
+apps/desktop/src-tauri/gen
 package-lock.json
 docs
 *.md

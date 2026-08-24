@@ -10,9 +10,9 @@ function invokeReturning(value: unknown): {
   invoke: Invoke;
   spy: ReturnType<typeof vi.fn>;
 } {
-  const spy = vi.fn((command: string, args?: Record<string, unknown>) =>
-    Promise.resolve(value)
-  );
+  const spy = vi.fn<
+    (command: string, args?: Record<string, unknown>) => Promise<unknown>
+  >(() => Promise.resolve(value));
   return {
     invoke: <T>(command: string, args?: Record<string, unknown>) =>
       (args === undefined ? spy(command) : spy(command, args)) as Promise<T>,
@@ -61,7 +61,9 @@ describe("credential store", () => {
 
   it("saves and deletes only through desktop commands", async () => {
     const secret = "fictional-session-value";
-    const spy = vi.fn((command: string, _args?: Record<string, unknown>) =>
+    const spy = vi.fn<
+      (command: string, args?: Record<string, unknown>) => Promise<unknown>
+    >((command: string) =>
       Promise.resolve(command === "delete_credential" ? "MISSING" : "PRESENT")
     );
     const invoke: Invoke = <T>(

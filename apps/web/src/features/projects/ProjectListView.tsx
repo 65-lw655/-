@@ -5,7 +5,6 @@ import {
 import {
   PROJECT_STATUSES,
   type ProjectLifecycle,
-  type ProjectListFilters,
   type ProjectStatus,
   type SystemRole
 } from "@project-online/domain";

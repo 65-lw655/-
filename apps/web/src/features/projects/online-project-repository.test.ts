@@ -112,7 +112,11 @@ function invalidInput(): ProjectInput {
 
 describe("online-project-repository", () => {
   it("forwards list and maps owner display names", async () => {
-    const filters: ProjectListFilters = { page: 2, pageSize: 20, query: "展馆" };
+    const filters: ProjectListFilters = {
+      page: 2,
+      pageSize: 20,
+      query: "展馆"
+    };
     const expectedPage = projectPage();
     const client = createClientStub({
       listProjects: vi.fn().mockResolvedValue(expectedPage)
@@ -169,7 +173,9 @@ describe("online-project-repository", () => {
     });
     const repository = createOnlineProjectRepository(client);
 
-    await expect(repository.getProject(crypto.randomUUID())).rejects.toMatchObject(
+    await expect(
+      repository.getProject(crypto.randomUUID())
+    ).rejects.toMatchObject(
       new ProjectRepositoryError("AUTHENTICATION_REQUIRED", "请重新登录")
     );
   });
@@ -197,7 +203,9 @@ describe("online-project-repository", () => {
     });
     const repository = createOnlineProjectRepository(client);
 
-    await expect(repository.getProject(crypto.randomUUID())).rejects.toMatchObject(
+    await expect(
+      repository.getProject(crypto.randomUUID())
+    ).rejects.toMatchObject(
       new ProjectRepositoryError("PROJECT_FORBIDDEN", "您没有查看此项目的权限")
     );
   });
@@ -210,7 +218,9 @@ describe("online-project-repository", () => {
     });
     const repository = createOnlineProjectRepository(client);
 
-    await expect(repository.getProject(crypto.randomUUID())).rejects.toMatchObject(
+    await expect(
+      repository.getProject(crypto.randomUUID())
+    ).rejects.toMatchObject(
       new ProjectRepositoryError("PROJECT_NOT_FOUND", "项目不存在或您无权查看")
     );
   });
@@ -252,7 +262,11 @@ describe("online-project-repository", () => {
       updateProject: vi
         .fn<ProjectsClient["updateProject"]>()
         .mockRejectedValue(
-          new ApiClientError(400, "VALIDATION_ERROR", "Project input is invalid")
+          new ApiClientError(
+            400,
+            "VALIDATION_ERROR",
+            "Project input is invalid"
+          )
         )
     });
     const repository = createOnlineProjectRepository(client);
@@ -279,9 +293,7 @@ describe("online-project-repository", () => {
 
     await expect(
       repository.updateProject(crypto.randomUUID(), validInput())
-    ).rejects.toMatchObject(
-      new ProjectRepositoryError("UNAVAILABLE", "boom")
-    );
+    ).rejects.toMatchObject(new ProjectRepositoryError("UNAVAILABLE", "boom"));
   });
 
   it("maps non-API list errors to unavailable", async () => {

@@ -1,4 +1,7 @@
-import { ProjectRepositoryError, type ProjectRepository } from "@project-online/ui";
+import {
+  ProjectRepositoryError,
+  type ProjectRepository
+} from "@project-online/ui";
 
 import { ApiClientError } from "../../api-client.js";
 import { toProjectUpdateRepositoryError } from "./project-repository-error.js";

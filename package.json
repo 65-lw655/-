@@ -26,6 +26,7 @@
     "test": "vitest",
     "test:db": "vitest --config vitest.integration.config.ts --run",
     "build": "npm run build --workspaces --if-present",
+    "verify:desktop": "npm run verify:platform --workspace @project-online/desktop && npm run test -- --run apps/desktop packages/ui/src/projects && npm run typecheck --workspace @project-online/desktop && npm run build:web --workspace @project-online/desktop",
     "verify": "npm run lint && npm run format:check && npm run typecheck && npm run test -- --run && npm run build && npm run smoke:artifact --workspace @project-online/api"
   },
   "devDependencies": {

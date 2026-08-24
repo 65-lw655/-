@@ -1,7 +1,6 @@
 import {
   ProjectEditorDialog as SharedProjectEditorDialog,
-  type ProjectRepository,
-  ProjectRepositoryError
+  type ProjectRepository
 } from "@project-online/ui";
 import {
   PROJECT_STATUSES,

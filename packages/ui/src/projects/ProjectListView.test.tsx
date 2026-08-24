@@ -99,9 +99,11 @@ describe("ProjectListView", () => {
     expect(repository.listProjects).toHaveBeenCalledWith(filters);
 
     const table = await screen.findByRole("table");
-    const pendingRow = within(table).getByRole("button", { name: "本机项目-A" })
+    const pendingRow = within(table)
+      .getByRole("button", { name: "本机项目-A" })
       .closest("tr");
-    const syncedRow = within(table).getByRole("button", { name: "本机项目-B" })
+    const syncedRow = within(table)
+      .getByRole("button", { name: "本机项目-B" })
       .closest("tr");
 
     expect(within(pendingRow!).getByText("待同步")).toBeVisible();
