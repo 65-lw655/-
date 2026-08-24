@@ -70,14 +70,17 @@ describe("001_project_core migration", () => {
 });
 
 describe("runMigrations", () => {
-  it("creates the M3 schema once and records migration 001", async () => {
+  it("creates the project schema once and records applied migrations", async () => {
     await withTestDatabase(async (pool) => {
       await runMigrations(pool, migrationsDirectory);
       await runMigrations(pool, migrationsDirectory);
       const applied = await pool.query<{ version: string }>(
         "SELECT version FROM schema_migrations ORDER BY version"
       );
-      expect(applied.rows).toEqual([{ version: "001_project_core" }]);
+      expect(applied.rows).toEqual([
+        { version: "001_project_core" },
+        { version: "002_project_sync" }
+      ]);
     });
   });
 });

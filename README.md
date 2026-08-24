@@ -2,7 +2,7 @@
 
 面向企业内部项目经营管理的线上系统。系统同时提供浏览器、macOS 桌面端和 Windows 桌面端，支持多人按权限访问项目，并允许桌面端在断网时继续编辑、恢复网络后自动同步。
 
-> 当前状态：M2 账号与权限闭环、M3 项目核心在线纵向切片已完成；M4 桌面离线基础开发和本地验收门禁已完成，macOS 本机 debug 构建通过，Windows CI 门禁已配置待 GitHub Actions 实跑确认。M4 仅包含本机项目缓存读取、离线编辑、SQLite Outbox 持久化和系统凭证适配；M5 同步上传、拉取、重试和冲突处理尚未实现。上述结论限于开发与隔离测试环境；生产认证仓储、部署账号权限、签名安装包和生产启动放在后续里程碑。
+> 当前状态：M2 账号与权限闭环、M3 项目核心在线纵向切片已完成；M4 桌面离线基础开发和本地验收门禁已完成，macOS 本机 debug 构建通过，Windows CI 门禁已配置待 GitHub Actions 实跑确认。M5.1 已完成 PROJECT 记录的同步协议、服务端幂等 push、cursor pull、PostgreSQL 操作结果表与变更日志表，以及隔离数据库端到端验收。桌面自动同步循环、退避重试调度、冲突处理界面、文件/合同/回款等其他实体同步仍未实现。上述结论限于开发与隔离测试环境；生产认证仓储、部署账号权限、签名安装包和生产启动放在后续里程碑。
 
 ## 一、建设目标
 
@@ -363,7 +363,7 @@ npm run build:desktop --workspace @project-online/desktop
 
 桌面本地数据由 Rust 侧固定写入应用数据目录内的 SQLite 文件，前端没有通用 SQL 或数据库路径入口。虚构本机项目种子只通过 development feature 暴露，用于本机验收；生产桌面入口不会自动注入示例数据。
 
-M4 只负责本机项目列表、详情、编辑和 Outbox 持久化。Outbox 暂不上传、不重试、不处理冲突，真正同步放在 M5。自动化测试只使用临时 SQLite 文件和内存凭证替身，不读取现有数据库，也不访问真实 Keychain 或 Windows Credential Manager。
+M4 只负责本机项目列表、详情、编辑和 Outbox 持久化。Outbox 暂不接入自动上传、不重试、不处理冲突；M5.1 已具备 PROJECT 服务端 push/pull 纵向切片，但桌面同步循环仍放在后续任务。自动化测试只使用临时 SQLite 文件、隔离 PostgreSQL schema 和内存凭证替身，不读取现有数据库，也不访问真实 Keychain 或 Windows Credential Manager。
 
 ### 验证
 
@@ -401,9 +401,9 @@ M3 最终验收使用隔离 PostgreSQL 16.15 和虚构数据完成：迁移连�
 | --- | --- |
 | `packages/domain` | 提供系统版本、账号状态、角色、项目模型与纯业务规则 |
 | `packages/ui` | Web 与桌面复用的项目列表、详情、编辑 UI 和仓储契约 |
-| `packages/sync` | 同步包边界，尚无同步实现 |
-| `apps/api` | Fastify 健康检查、账号、会话、用户管理及 PostgreSQL 项目业务 API |
+| `packages/sync` | PROJECT 同步协议、push/pull 契约和运行时校验边界 |
+| `apps/api` | Fastify 健康检查、账号、会话、用户管理、PostgreSQL 项目业务 API 及 PROJECT 同步 push/pull API |
 | `apps/web` | React 登录、账号管理、项目列表、详情、编辑、成员与审计界面 |
 | `apps/desktop` | Tauri 桌面端、本机 SQLite 项目缓存、离线编辑 Outbox 与系统凭证适配 |
 
-M2 身份数据仍使用本机文件仓储；M3 仅将项目业务保存到 PostgreSQL。M4 已建立桌面离线编辑基础，但仍不包含 M5 同步上传/拉取、旧数据迁移、文件上传、多实例生产存储、签名安装包或自动更新。
+M2 身份数据仍使用本机文件仓储；M3 将项目业务保存到 PostgreSQL。M4 已建立桌面离线编辑基础，M5.1 已建立 PROJECT 服务端同步纵向切片；旧数据迁移、文件上传、多实体同步、桌面自动同步循环、多实例生产存储、签名安装包和自动更新仍在后续里程碑。

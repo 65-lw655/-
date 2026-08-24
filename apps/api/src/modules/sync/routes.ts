@@ -40,7 +40,10 @@ export function registerSyncRoutes(
     {
       schema: {
         body: pushProjectsRequestSchema,
-        response: { ...apiErrorResponseSchemas, 200: pushProjectsResponseSchema }
+        response: {
+          ...apiErrorResponseSchemas,
+          200: pushProjectsResponseSchema
+        }
       }
     },
     async (request) => {
@@ -55,7 +58,10 @@ export function registerSyncRoutes(
     {
       schema: {
         querystring: pullProjectsQuerySchema,
-        response: { ...apiErrorResponseSchemas, 200: pullProjectsResponseSchema }
+        response: {
+          ...apiErrorResponseSchemas,
+          200: pullProjectsResponseSchema
+        }
       }
     },
     async (request) =>

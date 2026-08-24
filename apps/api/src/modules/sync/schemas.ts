@@ -2,12 +2,14 @@ import {
   MAX_PULL_PAGE_SIZE,
   MAX_PUSH_BATCH_SIZE,
   PROJECT_ACCESS_REVOKED_CHANGE_TYPE,
-  PROJECT_SYNC_ACTIONS,
   PROJECT_SYNC_RESULT_STATUSES,
   PROTOCOL_VERSION
 } from "@project-online/sync";
 
-import { apiErrorResponseSchemas, emptyObjectSchema } from "../projects/schemas.js";
+import {
+  apiErrorResponseSchemas,
+  emptyObjectSchema
+} from "../projects/schemas.js";
 
 const uuidProperty = { type: "string", format: "uuid" } as const;
 const dateProperty = { type: "string", format: "date" } as const;
