@@ -15,6 +15,7 @@
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
     "@project-online/domain": "*",
+    "@project-online/sync": "*",
     "@types/pg": "^8.21.0",
     "fastify": "^5.11.3",
     "pg": "^8.23.0"

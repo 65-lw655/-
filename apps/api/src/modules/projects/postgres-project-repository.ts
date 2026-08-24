@@ -15,6 +15,10 @@ import {
   type ProjectRecord,
   type ProjectStatus
 } from "@project-online/domain";
+import type {
+  ProjectSyncResultStatus,
+  PushProjectResult
+} from "@project-online/sync";
 import type { Pool, PoolClient, QueryResultRow } from "pg";
 
 import type {
@@ -30,6 +34,12 @@ import type {
   UpdateMemberRecord,
   UpdateProjectRecord
 } from "./project-repository.js";
+import type {
+  AppendProjectChange,
+  ProjectSyncTransaction,
+  StoredSyncOperationResult,
+  WriteSyncOperationResult
+} from "../sync/sync-repository.js";
 
 interface ProjectRow extends QueryResultRow {
   id: string;
@@ -93,6 +103,19 @@ interface CountRow extends QueryResultRow {
 
 interface SequenceRow extends QueryResultRow {
   value: string | number;
+}
+
+interface SyncOperationResultRow extends QueryResultRow {
+  device_id: string;
+  operation_id: string;
+  project_id: string;
+  entity_id: string;
+  entity_type: "PROJECT";
+  status: ProjectSyncResultStatus;
+  result_payload: unknown;
+  error_code: string | null;
+  created_at: string | Date;
+  actor_user_id: string;
 }
 
 interface ProjectFilters {
@@ -304,6 +327,26 @@ function mapProjectAuditRow(row: ProjectAuditRow): ProjectAuditEvent {
   };
 }
 
+function mapSyncOperationResultRow(
+  row: SyncOperationResultRow
+): StoredSyncOperationResult {
+  if (!isRecord(row.result_payload)) {
+    throw new TypeError("PostgreSQL sync operation result mapping failed");
+  }
+  return {
+    deviceId: row.device_id,
+    operationId: row.operation_id,
+    projectId: row.project_id,
+    entityId: row.entity_id,
+    entityType: row.entity_type,
+    status: row.status,
+    result: row.result_payload as unknown as PushProjectResult,
+    errorCode: row.error_code,
+    createdAt: toIsoString(row.created_at),
+    actorUserId: row.actor_user_id
+  };
+}
+
 function buildProjectFilters(
   scope: "ALL" | { userId: string },
   filters: ProjectListFilters
@@ -337,8 +380,71 @@ function buildProjectFilters(
   };
 }
 
-class PostgresProjectTransaction implements ProjectTransaction {
+class PostgresProjectTransaction
+  implements ProjectTransaction, ProjectSyncTransaction
+{
   constructor(private readonly client: PoolClient) {}
+
+  async findSyncOperationResult(
+    deviceId: string,
+    operationId: string
+  ): Promise<StoredSyncOperationResult | null> {
+    const result = await this.client.query<SyncOperationResultRow>(
+      `SELECT device_id, operation_id, project_id, entity_id, entity_type,
+              status, result_payload, error_code, created_at, actor_user_id
+         FROM sync_operation_results
+        WHERE device_id = $1
+          AND operation_id = $2`,
+      [deviceId, operationId]
+    );
+    const row = result.rows[0];
+    return row === undefined ? null : mapSyncOperationResultRow(row);
+  }
+
+  async writeSyncOperationResult(
+    input: WriteSyncOperationResult
+  ): Promise<void> {
+    await this.client.query(
+      `INSERT INTO sync_operation_results (
+         device_id, operation_id, project_id, entity_id, entity_type,
+         status, result_payload, error_code, created_at, actor_user_id
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)`,
+      [
+        input.deviceId,
+        input.operationId,
+        input.projectId,
+        input.entityId,
+        input.entityType,
+        input.status,
+        JSON.stringify(input.result),
+        input.errorCode,
+        input.createdAt,
+        input.actorUserId
+      ]
+    );
+  }
+
+  async appendProjectChange(input: AppendProjectChange): Promise<void> {
+    await this.client.query(
+      `INSERT INTO project_change_log (
+         commit_sequence, project_id, entity_id, entity_type, revision,
+         deleted, project_snapshot, actor_user_id, changed_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)`,
+      [
+        input.commitSequence,
+        input.projectId,
+        input.entityId,
+        input.entityType,
+        input.revision,
+        input.deleted,
+        input.projectSnapshot === null
+          ? null
+          : JSON.stringify(input.projectSnapshot),
+        input.actorUserId,
+        input.changedAt
+      ]
+    );
+  }
 
   async getAccess(
     projectId: string,
@@ -700,7 +806,7 @@ export class PostgresProjectRepository implements ProjectRepository {
   }
 
   async transaction<T>(
-    work: (transaction: ProjectTransaction) => Promise<T>
+    work: (transaction: ProjectSyncTransaction) => Promise<T>
   ): Promise<T> {
     const client = await this.pool.connect();
     try {
