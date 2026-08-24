@@ -104,6 +104,49 @@ describe("002_project_sync migration", () => {
     });
   });
 
+  it("persists missing-project results without a projects row", async () => {
+    await withTestDatabase(async (pool) => {
+      await runMigrations(pool, migrationsDirectory);
+
+      const missingProjectId = randomUUID();
+      const actorUserId = randomUUID();
+      const deviceId = randomUUID();
+      const operationId = randomUUID();
+
+      await pool.query(
+        `INSERT INTO sync_operation_results (
+           device_id, operation_id, project_id, entity_id, entity_type,
+           status, result_payload, error_code, created_at, actor_user_id
+         ) VALUES (
+           $1, $2, $3, $3, 'PROJECT',
+           'NOT_FOUND', '{"status":"NOT_FOUND"}'::jsonb, 'PROJECT_NOT_FOUND',
+           TIMESTAMPTZ '2026-08-24T10:03:00Z', $4
+         )`,
+        [deviceId, operationId, missingProjectId, actorUserId]
+      );
+
+      const lookup = await pool.query<{
+        project_id: string;
+        status: string;
+        error_code: string | null;
+      }>(
+        `SELECT project_id, status, error_code
+           FROM sync_operation_results
+          WHERE device_id = $1
+            AND operation_id = $2`,
+        [deviceId, operationId]
+      );
+
+      expect(lookup.rows).toEqual([
+        {
+          project_id: missingProjectId,
+          status: "NOT_FOUND",
+          error_code: "PROJECT_NOT_FOUND"
+        }
+      ]);
+    });
+  });
+
   it("stores append-only project changes ordered by commit sequence", async () => {
     await withTestDatabase(async (pool) => {
       await runMigrations(pool, migrationsDirectory);
@@ -165,6 +208,64 @@ describe("002_project_sync migration", () => {
         { commit_sequence: "11", revision: 2, deleted: false },
         { commit_sequence: "12", revision: 3, deleted: true }
       ]);
+    });
+  });
+
+  it("rejects per-entity revision duplicates and regressions", async () => {
+    await withTestDatabase(async (pool) => {
+      await runMigrations(pool, migrationsDirectory);
+
+      const projectId = randomUUID();
+      const actorUserId = randomUUID();
+
+      await pool.query(
+        `INSERT INTO projects (
+           id, name, year, type, status, phase, lifecycle, filing_status,
+           planned_completion_date, actual_completion_date,
+           created_at, created_by, updated_at, updated_by,
+           revision, commit_sequence, archived_at, archived_by
+         ) VALUES (
+           $1, '修订号约束测试项目', 2026, '展览展示', '施工中', '实施', 'ACTIVE', '无需报建',
+           NULL, NULL,
+           TIMESTAMPTZ '2026-08-24T12:00:00Z', $2, TIMESTAMPTZ '2026-08-24T12:00:00Z', $2,
+           1, 20, NULL, NULL
+         )`,
+        [projectId, actorUserId]
+      );
+
+      await pool.query(
+        `INSERT INTO project_change_log (
+           commit_sequence, project_id, entity_id, entity_type, revision,
+           deleted, project_snapshot, actor_user_id, changed_at
+         ) VALUES
+           (21, $1, $1, 'PROJECT', 2, false, '{"name":"版本二"}'::jsonb, $2, TIMESTAMPTZ '2026-08-24T12:01:00Z'),
+           (22, $1, $1, 'PROJECT', 3, false, '{"name":"版本三"}'::jsonb, $2, TIMESTAMPTZ '2026-08-24T12:02:00Z')`,
+        [projectId, actorUserId]
+      );
+
+      await expect(
+        pool.query(
+          `INSERT INTO project_change_log (
+             commit_sequence, project_id, entity_id, entity_type, revision,
+             deleted, project_snapshot, actor_user_id, changed_at
+           ) VALUES (
+             23, $1, $1, 'PROJECT', 3, false, '{"name":"重复修订"}'::jsonb, $2, TIMESTAMPTZ '2026-08-24T12:03:00Z'
+           )`,
+          [projectId, actorUserId]
+        )
+      ).rejects.toThrow();
+
+      await expect(
+        pool.query(
+          `INSERT INTO project_change_log (
+             commit_sequence, project_id, entity_id, entity_type, revision,
+             deleted, project_snapshot, actor_user_id, changed_at
+           ) VALUES (
+             24, $1, $1, 'PROJECT', 2, false, '{"name":"回退修订"}'::jsonb, $2, TIMESTAMPTZ '2026-08-24T12:04:00Z'
+           )`,
+          [projectId, actorUserId]
+        )
+      ).rejects.toThrow();
     });
   });
 });

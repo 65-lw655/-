@@ -1,7 +1,7 @@
 CREATE TABLE sync_operation_results (
   device_id uuid NOT NULL,
   operation_id uuid NOT NULL,
-  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+  project_id uuid NOT NULL,
   entity_id uuid NOT NULL,
   entity_type varchar(32) NOT NULL CHECK (entity_type IN ('PROJECT')),
   status varchar(32) NOT NULL CHECK (
@@ -46,3 +46,38 @@ CREATE INDEX project_change_log_project_commit_sequence_idx
 
 CREATE INDEX project_change_log_entity_commit_sequence_idx
   ON project_change_log (entity_type, entity_id, commit_sequence DESC);
+
+CREATE INDEX project_change_log_entity_revision_idx
+  ON project_change_log (entity_type, entity_id, revision DESC);
+
+CREATE FUNCTION enforce_project_change_log_revision_monotonicity()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  latest_revision integer;
+BEGIN
+  SELECT revision
+    INTO latest_revision
+    FROM project_change_log
+   WHERE entity_type = NEW.entity_type
+     AND entity_id = NEW.entity_id
+   ORDER BY revision DESC
+   LIMIT 1;
+
+  IF latest_revision IS NOT NULL AND NEW.revision <= latest_revision THEN
+    RAISE EXCEPTION
+      'project_change_log revision must increase for entity %, existing %, got %',
+      NEW.entity_id,
+      latest_revision,
+      NEW.revision;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER project_change_log_revision_monotonicity_trigger
+BEFORE INSERT ON project_change_log
+FOR EACH ROW
+EXECUTE FUNCTION enforce_project_change_log_revision_monotonicity();
