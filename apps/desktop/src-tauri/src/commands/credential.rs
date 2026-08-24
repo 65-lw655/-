@@ -1,13 +1,24 @@
+use std::fmt;
+
 use serde::Deserialize;
 use tauri::State;
 
 use super::{CommandError, DesktopState};
 use crate::credential::{CredentialError, CredentialStatus, CredentialStore};
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveCredentialInput {
     credential: String,
+}
+
+impl fmt::Debug for SaveCredentialInput {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SaveCredentialInput")
+            .field("credential", &"[REDACTED]")
+            .finish()
+    }
 }
 
 #[tauri::command]
@@ -57,4 +68,23 @@ pub fn delete_credential_from_store(
 ) -> Result<CredentialStatus, CredentialError> {
     store.delete()?;
     Ok(CredentialStatus::Missing)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SaveCredentialInput;
+    use uuid::Uuid;
+
+    #[test]
+    fn save_credential_input_debug_redacts_secret() {
+        let secret = format!("fictional-session-{}", Uuid::new_v4());
+        let input = SaveCredentialInput {
+            credential: secret.clone(),
+        };
+
+        let debug_output = format!("{input:?}");
+
+        assert!(debug_output.contains("[REDACTED]"));
+        assert!(!debug_output.contains(&secret));
+    }
 }
