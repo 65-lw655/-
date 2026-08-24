@@ -199,6 +199,21 @@ function samplePullResponse(): PullProjectsResponse {
   };
 }
 
+function sampleRevocationPullResponse(): PullProjectsResponse {
+  return {
+    protocolVersion: PROTOCOL_VERSION,
+    changes: [
+      {
+        type: "PROJECT_ACCESS_REVOKED",
+        projectId: "11111111-1111-4111-8111-111111111111",
+        commitSequence: 20
+      }
+    ],
+    nextCursor: 20,
+    hasMore: false
+  };
+}
+
 describe("sync HTTP API", () => {
   it("requires an authenticated session for push and pull", async () => {
     const harness = await createHarness();
@@ -326,6 +341,25 @@ describe("sync HTTP API", () => {
         harness.principal,
         { after: 18, limit: 1 }
       );
+    } finally {
+      await harness.app.close();
+    }
+  });
+
+  it("accepts pull responses that contain project access revoked instructions", async () => {
+    const harness = await createHarness();
+    try {
+      const result = sampleRevocationPullResponse();
+      harness.syncService.pullProjects.mockResolvedValueOnce(result);
+
+      const response = await harness.app.inject({
+        method: "GET",
+        url: "/api/v1/sync/pull?after=19&limit=1",
+        headers: harness.authenticatedHeaders
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual(result);
     } finally {
       await harness.app.close();
     }

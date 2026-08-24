@@ -7,6 +7,7 @@ import {
   isProjectSyncOperation,
   isPullProjectsQuery,
   isPushProjectsRequest,
+  type PullProjectsResponse,
   type ProjectSyncOperation
 } from "./project-sync.js";
 
@@ -90,5 +91,26 @@ describe("project sync protocol", () => {
     expect(isPullProjectsQuery({ after: 0, limit: 500 })).toBe(true);
     expect(isPullProjectsQuery({ after: -1, limit: 500 })).toBe(false);
     expect(isPullProjectsQuery({ after: 0, limit: 501 })).toBe(false);
+  });
+
+  it("allows pull responses to include project access revoked instructions", () => {
+    const response: PullProjectsResponse = {
+      protocolVersion: PROTOCOL_VERSION,
+      changes: [
+        {
+          type: "PROJECT_ACCESS_REVOKED",
+          projectId: uuid,
+          commitSequence: 42
+        }
+      ],
+      nextCursor: 42,
+      hasMore: false
+    };
+
+    expect(response.changes[0]).toEqual({
+      type: "PROJECT_ACCESS_REVOKED",
+      projectId: uuid,
+      commitSequence: 42
+    });
   });
 });

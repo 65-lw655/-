@@ -1,6 +1,7 @@
 import {
   MAX_PULL_PAGE_SIZE,
   MAX_PUSH_BATCH_SIZE,
+  PROJECT_ACCESS_REVOKED_CHANGE_TYPE,
   PROJECT_SYNC_ACTIONS,
   PROJECT_SYNC_RESULT_STATUSES,
   PROTOCOL_VERSION
@@ -127,6 +128,17 @@ const projectChangeSchema = {
   }
 } as const;
 
+const projectAccessRevokedChangeSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["type", "projectId", "commitSequence"],
+  properties: {
+    type: { type: "string", const: PROJECT_ACCESS_REVOKED_CHANGE_TYPE },
+    projectId: uuidProperty,
+    commitSequence: { type: "integer" }
+  }
+} as const;
+
 export const pushProjectsRequestSchema = {
   type: "object",
   additionalProperties: false,
@@ -169,7 +181,12 @@ export const pullProjectsResponseSchema = {
   required: ["protocolVersion", "changes", "nextCursor", "hasMore"],
   properties: {
     protocolVersion: { type: "integer", const: PROTOCOL_VERSION },
-    changes: { type: "array", items: projectChangeSchema },
+    changes: {
+      type: "array",
+      items: {
+        oneOf: [projectChangeSchema, projectAccessRevokedChangeSchema]
+      }
+    },
     nextCursor: { type: "integer" },
     hasMore: { type: "boolean" }
   }
@@ -178,6 +195,7 @@ export const pullProjectsResponseSchema = {
 export {
   apiErrorResponseSchemas,
   deleteOperationSchema,
+  projectAccessRevokedChangeSchema,
   projectSyncPayloadSchema,
   pushProjectResultSchema,
   upsertOperationSchema

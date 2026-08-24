@@ -3,6 +3,8 @@ export const MAX_PUSH_BATCH_SIZE = 100 as const;
 export const MAX_PULL_PAGE_SIZE = 500 as const;
 
 export const PROJECT_ENTITY_TYPE = "PROJECT" as const;
+export const PROJECT_ACCESS_REVOKED_CHANGE_TYPE =
+  "PROJECT_ACCESS_REVOKED" as const;
 export const PROJECT_SYNC_ACTIONS = ["UPSERT", "DELETE"] as const;
 export type ProjectSyncAction = (typeof PROJECT_SYNC_ACTIONS)[number];
 
@@ -78,9 +80,17 @@ export interface ProjectChange {
   project: ProjectSyncPayload | null;
 }
 
+export interface ProjectAccessRevokedChange {
+  type: typeof PROJECT_ACCESS_REVOKED_CHANGE_TYPE;
+  projectId: string;
+  commitSequence: number;
+}
+
+export type PullProjectsChange = ProjectChange | ProjectAccessRevokedChange;
+
 export interface PullProjectsResponse {
   protocolVersion: typeof PROTOCOL_VERSION;
-  changes: ProjectChange[];
+  changes: PullProjectsChange[];
   nextCursor: number;
   hasMore: boolean;
 }
