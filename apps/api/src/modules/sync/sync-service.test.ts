@@ -191,6 +191,19 @@ async function syncCounts(pool: Pool) {
   return result.rows[0];
 }
 
+async function changeRows(pool: Pool) {
+  const result = await pool.query<{
+    revision: number;
+    deleted: boolean;
+    project_snapshot: unknown;
+  }>(
+    `SELECT revision, deleted, project_snapshot
+       FROM project_change_log
+      ORDER BY commit_sequence ASC`
+  );
+  return result.rows;
+}
+
 describe("SyncService.pushProjects", () => {
   it("accepts an authorized project upsert and writes the project, audit, change log, and operation result atomically", async () => {
     await withTestDatabase(async (pool) => {
@@ -280,6 +293,220 @@ describe("SyncService.pushProjects", () => {
         transaction.getAccess(project.id, owner.id, false)
       );
       expect(access.project?.revision).toBe(project.revision + 1);
+    });
+  });
+
+  it("returns the stored result for concurrent duplicate operations without leaking a unique violation", async () => {
+    await withTestDatabase(async (pool) => {
+      const owner = storedUser("USER");
+      const { repository, service, principalForUser } = await createHarness(
+        pool,
+        [owner]
+      );
+      await pool.query(`
+        CREATE FUNCTION delay_sync_operation_result_insert()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        BEGIN
+          PERFORM pg_sleep(0.2);
+          RETURN NEW;
+        END;
+        $$;
+
+        CREATE TRIGGER delay_sync_operation_result_insert_trigger
+        BEFORE INSERT ON sync_operation_results
+        FOR EACH ROW
+        EXECUTE FUNCTION delay_sync_operation_result_insert();
+      `);
+      const project = await createProjectFixture(
+        repository,
+        owner.id,
+        owner.id
+      );
+      const push = operation(project);
+      const request = {
+        protocolVersion: PROTOCOL_VERSION,
+        deviceId: push.deviceId,
+        operations: [push]
+      };
+
+      const [first, second] = await Promise.all([
+        service.pushProjects(principalForUser(owner), request),
+        service.pushProjects(principalForUser(owner), request)
+      ]);
+
+      expect(second.results[0]).toEqual(first.results[0]);
+      expect(await syncCounts(pool)).toEqual({
+        operations: 1,
+        changes: 1,
+        audits: 2
+      });
+      const access = await repository.transaction((transaction) =>
+        transaction.getAccess(project.id, owner.id, false)
+      );
+      expect(access.project?.revision).toBe(project.revision + 1);
+    });
+  });
+
+  it("accepts an authorized project delete as a tombstone change", async () => {
+    await withTestDatabase(async (pool) => {
+      const owner = storedUser("USER");
+      const { repository, service, principalForUser } = await createHarness(
+        pool,
+        [owner]
+      );
+      const project = await createProjectFixture(
+        repository,
+        owner.id,
+        owner.id
+      );
+      const push = operation(project, { action: "DELETE", payload: {} });
+
+      const response = await service.pushProjects(principalForUser(owner), {
+        protocolVersion: PROTOCOL_VERSION,
+        deviceId: push.deviceId,
+        operations: [push]
+      });
+
+      expect(response.results[0]).toMatchObject({
+        operationId: push.operationId,
+        status: "ACCEPTED",
+        entityId: project.id,
+        revision: project.revision + 1,
+        conflict: false,
+        serverCommittedAt: later
+      });
+      const access = await repository.transaction((transaction) =>
+        transaction.getAccess(project.id, owner.id, false)
+      );
+      expect(access.project).toMatchObject({
+        lifecycle: "ARCHIVED",
+        archivedBy: owner.id,
+        revision: project.revision + 1
+      });
+      expect(await changeRows(pool)).toEqual([
+        {
+          revision: project.revision + 1,
+          deleted: true,
+          project_snapshot: null
+        }
+      ]);
+    });
+  });
+
+  it("returns the stored delete result when a DELETE operation is replayed", async () => {
+    await withTestDatabase(async (pool) => {
+      const owner = storedUser("USER");
+      const { repository, service, principalForUser } = await createHarness(
+        pool,
+        [owner]
+      );
+      const project = await createProjectFixture(
+        repository,
+        owner.id,
+        owner.id
+      );
+      const push = operation(project, { action: "DELETE", payload: {} });
+      const request = {
+        protocolVersion: PROTOCOL_VERSION,
+        deviceId: push.deviceId,
+        operations: [push]
+      };
+
+      const first = await service.pushProjects(
+        principalForUser(owner),
+        request
+      );
+      const second = await service.pushProjects(
+        principalForUser(owner),
+        request
+      );
+
+      expect(second.results[0]).toEqual(first.results[0]);
+      expect(await syncCounts(pool)).toEqual({
+        operations: 1,
+        changes: 1,
+        audits: 2
+      });
+    });
+  });
+
+  it("restores a deleted project when a later authorized UPSERT arrives", async () => {
+    await withTestDatabase(async (pool) => {
+      const owner = storedUser("USER");
+      const { repository, service, principalForUser } = await createHarness(
+        pool,
+        [owner]
+      );
+      const project = await createProjectFixture(
+        repository,
+        owner.id,
+        owner.id
+      );
+      const deletePush = operation(project, {
+        action: "DELETE",
+        payload: {}
+      });
+      const deleteResponse = await service.pushProjects(
+        principalForUser(owner),
+        {
+          protocolVersion: PROTOCOL_VERSION,
+          deviceId: deletePush.deviceId,
+          operations: [deletePush]
+        }
+      );
+      const upsertPush = operation(project, {
+        deviceId: deletePush.deviceId,
+        baseRevision: deleteResponse.results[0]!.revision!,
+        payload: {
+          ...validProjectInput,
+          name: "虚构同步项目（删除后恢复）"
+        }
+      });
+
+      const upsertResponse = await service.pushProjects(
+        principalForUser(owner),
+        {
+          protocolVersion: PROTOCOL_VERSION,
+          deviceId: upsertPush.deviceId,
+          operations: [upsertPush]
+        }
+      );
+
+      expect(upsertResponse.results[0]).toMatchObject({
+        operationId: upsertPush.operationId,
+        status: "ACCEPTED",
+        entityId: project.id,
+        revision: project.revision + 2,
+        conflict: false,
+        serverCommittedAt: later
+      });
+      const access = await repository.transaction((transaction) =>
+        transaction.getAccess(project.id, owner.id, false)
+      );
+      expect(access.project).toMatchObject({
+        name: "虚构同步项目（删除后恢复）",
+        lifecycle: "ACTIVE",
+        archivedAt: null,
+        archivedBy: null,
+        revision: project.revision + 2
+      });
+      expect(await changeRows(pool)).toEqual([
+        {
+          revision: project.revision + 1,
+          deleted: true,
+          project_snapshot: null
+        },
+        {
+          revision: project.revision + 2,
+          deleted: false,
+          project_snapshot: {
+            ...validProjectInput,
+            name: "虚构同步项目（删除后恢复）"
+          }
+        }
+      ]);
     });
   });
 

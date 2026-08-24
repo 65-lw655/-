@@ -4,6 +4,7 @@ import {
   validateProjectInput,
   type AuthorizationAction,
   type ProjectAuditChangeSummary,
+  type ProjectAuditField,
   type ProjectAuditValueField,
   type ProjectInput,
   type ProjectRecord
@@ -90,6 +91,22 @@ function projectChangeSummary(
   return { fields, before, after };
 }
 
+function syncProjectChangeSummary(
+  current: ProjectRecord,
+  input: ProjectInput,
+  fields: readonly (keyof ProjectInput)[]
+): ProjectAuditChangeSummary {
+  const summary = projectChangeSummary(current, input, fields);
+  if (current.lifecycle !== "ARCHIVED") {
+    return summary;
+  }
+  return {
+    fields: [...summary.fields, "lifecycle"] as ProjectAuditField[],
+    before: { ...summary.before, lifecycle: current.lifecycle },
+    after: { ...summary.after, lifecycle: "ACTIVE" }
+  };
+}
+
 function projectAuthorizationContext(
   projectId: string,
   projectExists: boolean,
@@ -148,6 +165,10 @@ export class SyncService {
     operation: ProjectSyncOperation
   ): Promise<PushProjectResult> {
     return this.repository.transaction(async (transaction) => {
+      await transaction.lockSyncOperationResult(
+        requestDeviceId,
+        operation.operationId
+      );
       const stored = await transaction.findSyncOperationResult(
         requestDeviceId,
         operation.operationId
@@ -203,16 +224,6 @@ export class SyncService {
         );
       }
 
-      if (access.project.lifecycle === "ARCHIVED") {
-        return this.persistResult(
-          transaction,
-          principal,
-          requestDeviceId,
-          operation,
-          "VALIDATION_FAILED"
-        );
-      }
-
       return operation.action === "DELETE"
         ? this.acceptDelete(
             transaction,
@@ -251,7 +262,7 @@ export class SyncService {
 
     const commitSequence = await transaction.nextCommitSequence();
     const occurredAt = this.dependencies.now().toISOString();
-    const project = await transaction.updateProject({
+    const project = await transaction.upsertProjectFromSync({
       ...input,
       projectId: operation.projectId,
       actorUserId: principal.userId,
@@ -277,7 +288,7 @@ export class SyncService {
       actorUserId: principal.userId,
       targetType: "PROJECT",
       targetId: project.id,
-      changeSummary: projectChangeSummary(current, input, changedFields),
+      changeSummary: syncProjectChangeSummary(current, input, changedFields),
       occurredAt
     });
     await transaction.appendProjectChange({

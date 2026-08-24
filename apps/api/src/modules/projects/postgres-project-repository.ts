@@ -385,6 +385,16 @@ class PostgresProjectTransaction
 {
   constructor(private readonly client: PoolClient) {}
 
+  async lockSyncOperationResult(
+    deviceId: string,
+    operationId: string
+  ): Promise<void> {
+    await this.client.query(
+      "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+      [deviceId, operationId]
+    );
+  }
+
   async findSyncOperationResult(
     deviceId: string,
     operationId: string
@@ -399,6 +409,47 @@ class PostgresProjectTransaction
     );
     const row = result.rows[0];
     return row === undefined ? null : mapSyncOperationResultRow(row);
+  }
+
+  async upsertProjectFromSync(
+    input: UpdateProjectRecord
+  ): Promise<ProjectRecord | null> {
+    const result = await this.client.query<ProjectRow>(
+      `UPDATE projects
+          SET name = $2,
+              year = $3,
+              type = $4,
+              status = $5,
+              phase = $6,
+              filing_status = $7,
+              planned_completion_date = $8,
+              actual_completion_date = $9,
+              lifecycle = 'ACTIVE',
+              updated_at = $10,
+              updated_by = $11,
+              revision = revision + 1,
+              commit_sequence = $12,
+              archived_at = NULL,
+              archived_by = NULL
+        WHERE id = $1
+        RETURNING ${projectColumns}`,
+      [
+        input.projectId,
+        input.name,
+        input.year,
+        input.type,
+        input.status,
+        input.phase,
+        input.filingStatus,
+        input.plannedCompletionDate,
+        input.actualCompletionDate,
+        input.occurredAt,
+        input.actorUserId,
+        input.commitSequence
+      ]
+    );
+    const row = result.rows[0];
+    return row === undefined ? null : mapProjectRow(row);
   }
 
   async writeSyncOperationResult(

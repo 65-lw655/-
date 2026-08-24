@@ -6,7 +6,10 @@ import type {
   PushProjectResult
 } from "@project-online/sync";
 
-import type { ProjectTransaction } from "../projects/project-repository.js";
+import type {
+  ProjectTransaction,
+  UpdateProjectRecord
+} from "../projects/project-repository.js";
 
 export interface StoredSyncOperationResult {
   deviceId: string;
@@ -47,10 +50,14 @@ export interface AppendProjectChange {
 }
 
 export interface ProjectSyncTransaction extends ProjectTransaction {
+  lockSyncOperationResult(deviceId: string, operationId: string): Promise<void>;
   findSyncOperationResult(
     deviceId: string,
     operationId: string
   ): Promise<StoredSyncOperationResult | null>;
+  upsertProjectFromSync(
+    input: UpdateProjectRecord
+  ): Promise<ProjectRecord | null>;
   writeSyncOperationResult(input: WriteSyncOperationResult): Promise<void>;
   appendProjectChange(input: AppendProjectChange): Promise<void>;
 }
