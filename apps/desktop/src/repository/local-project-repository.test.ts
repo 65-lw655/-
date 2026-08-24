@@ -81,17 +81,26 @@ function bridgeStub(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
       deviceId: "00000000-0000-4000-8000-0000000000d5",
       pendingCount: 0
     }),
+    credentialStatus: vi.fn().mockResolvedValue("MISSING"),
+    saveCredential: vi.fn().mockResolvedValue("PRESENT"),
+    deleteCredential: vi.fn().mockResolvedValue("MISSING"),
     ...overrides
   };
 }
 
 describe("local project repository", () => {
   it("forwards list filters and preserves item syncState", async () => {
-    const filters: ProjectListFilters = { page: 1, pageSize: 20, query: "示例" };
+    const filters: ProjectListFilters = {
+      page: 1,
+      pageSize: 20,
+      query: "示例"
+    };
     const bridge = bridgeStub();
     const repository = createLocalProjectRepository(bridge);
 
-    await expect(repository.listProjects(filters)).resolves.toEqual(projectPage());
+    await expect(repository.listProjects(filters)).resolves.toEqual(
+      projectPage()
+    );
 
     expect(bridge.listProjects).toHaveBeenCalledWith(filters);
   });

@@ -7,6 +7,8 @@ export interface LocalStatus {
   pendingCount: number;
 }
 
+export type CredentialStatus = "PRESENT" | "MISSING" | "UNAVAILABLE";
+
 export interface DesktopBridge {
   listProjects(filters: ProjectListFilters): Promise<ProjectPage>;
   getProject(projectId: string): Promise<ProjectDetails>;
@@ -15,6 +17,9 @@ export interface DesktopBridge {
     input: ProjectInput
   ): Promise<ProjectDetails>;
   getLocalStatus(): Promise<LocalStatus>;
+  credentialStatus(): Promise<CredentialStatus>;
+  saveCredential(credential: string): Promise<CredentialStatus>;
+  deleteCredential(): Promise<CredentialStatus>;
 }
 
 export type Invoke = <T>(
@@ -22,7 +27,9 @@ export type Invoke = <T>(
   args?: Record<string, unknown>
 ) => Promise<T>;
 
-export function createDesktopBridge(invokeCommand: Invoke = invoke): DesktopBridge {
+export function createDesktopBridge(
+  invokeCommand: Invoke = invoke
+): DesktopBridge {
   return {
     listProjects: (filters) =>
       invokeCommand<ProjectPage>("list_local_projects", { filters }),
@@ -33,7 +40,14 @@ export function createDesktopBridge(invokeCommand: Invoke = invoke): DesktopBrid
         projectId,
         input
       }),
-    getLocalStatus: () => invokeCommand<LocalStatus>("get_local_status")
+    getLocalStatus: () => invokeCommand<LocalStatus>("get_local_status"),
+    credentialStatus: () =>
+      invokeCommand<CredentialStatus>("credential_status"),
+    saveCredential: (credential) =>
+      invokeCommand<CredentialStatus>("save_credential", {
+        input: { credential }
+      }),
+    deleteCredential: () => invokeCommand<CredentialStatus>("delete_credential")
   };
 }
 

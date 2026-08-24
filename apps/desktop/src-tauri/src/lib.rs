@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod credential;
 pub mod local_db;
 
 use std::error::Error;
@@ -24,6 +25,9 @@ pub fn run() {
         commands::projects::get_local_project,
         commands::projects::update_local_project,
         commands::projects::seed_fictional_local_project,
+        commands::credential::credential_status,
+        commands::credential::save_credential,
+        commands::credential::delete_credential,
         commands::status::get_local_status
     ]);
 
@@ -32,6 +36,9 @@ pub fn run() {
         commands::projects::list_local_projects,
         commands::projects::get_local_project,
         commands::projects::update_local_project,
+        commands::credential::credential_status,
+        commands::credential::save_credential,
+        commands::credential::delete_credential,
         commands::status::get_local_status
     ]);
 

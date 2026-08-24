@@ -101,7 +101,9 @@ describe("desktop bridge", () => {
     const bridge = createDesktopBridge(invoke);
     const projectId = "00000000-0000-4000-8000-0000000000f5";
 
-    await expect(bridge.getProject(projectId)).resolves.toEqual(projectDetails());
+    await expect(bridge.getProject(projectId)).resolves.toEqual(
+      projectDetails()
+    );
 
     expect(spy).toHaveBeenCalledWith("get_local_project", { projectId });
   });
@@ -133,5 +135,35 @@ describe("desktop bridge", () => {
     await expect(bridge.getLocalStatus()).resolves.toEqual(status);
 
     expect(spy).toHaveBeenCalledWith("get_local_status");
+  });
+
+  it("invokes credential_status without payload", async () => {
+    const { invoke, spy } = invokeReturning("MISSING");
+    const bridge = createDesktopBridge(invoke);
+
+    await expect(bridge.credentialStatus()).resolves.toBe("MISSING");
+
+    expect(spy).toHaveBeenCalledWith("credential_status");
+  });
+
+  it("invokes save_credential with the session credential input", async () => {
+    const { invoke, spy } = invokeReturning("PRESENT");
+    const bridge = createDesktopBridge(invoke);
+    const credential = "fictional-session-value";
+
+    await expect(bridge.saveCredential(credential)).resolves.toBe("PRESENT");
+
+    expect(spy).toHaveBeenCalledWith("save_credential", {
+      input: { credential }
+    });
+  });
+
+  it("invokes delete_credential without payload", async () => {
+    const { invoke, spy } = invokeReturning("MISSING");
+    const bridge = createDesktopBridge(invoke);
+
+    await expect(bridge.deleteCredential()).resolves.toBe("MISSING");
+
+    expect(spy).toHaveBeenCalledWith("delete_credential");
   });
 });
