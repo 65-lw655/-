@@ -211,7 +211,7 @@ describe("002_project_sync migration", () => {
     });
   });
 
-  it("rejects per-entity revision duplicates and regressions", async () => {
+  it("rejects duplicate revisions for the same entity", async () => {
     await withTestDatabase(async (pool) => {
       await runMigrations(pool, migrationsDirectory);
 
@@ -253,6 +253,88 @@ describe("002_project_sync migration", () => {
            )`,
           [projectId, actorUserId]
         )
+      ).rejects.toThrow(/duplicate key value|revision must increase/u);
+    });
+  });
+
+  it("rejects regressing revisions for the same entity", async () => {
+    await withTestDatabase(async (pool) => {
+      await runMigrations(pool, migrationsDirectory);
+
+      const projectId = randomUUID();
+      const actorUserId = randomUUID();
+
+      await pool.query(
+        `INSERT INTO projects (
+           id, name, year, type, status, phase, lifecycle, filing_status,
+           planned_completion_date, actual_completion_date,
+           created_at, created_by, updated_at, updated_by,
+           revision, commit_sequence, archived_at, archived_by
+         ) VALUES (
+           $1, '回退修订测试项目', 2026, '展览展示', '施工中', '实施', 'ACTIVE', '无需报建',
+           NULL, NULL,
+           TIMESTAMPTZ '2026-08-24T12:10:00Z', $2, TIMESTAMPTZ '2026-08-24T12:10:00Z', $2,
+           1, 30, NULL, NULL
+         )`,
+        [projectId, actorUserId]
+      );
+
+      await pool.query(
+        `INSERT INTO project_change_log (
+           commit_sequence, project_id, entity_id, entity_type, revision,
+           deleted, project_snapshot, actor_user_id, changed_at
+         ) VALUES
+           (31, $1, $1, 'PROJECT', 2, false, '{"name":"版本二"}'::jsonb, $2, TIMESTAMPTZ '2026-08-24T12:11:00Z'),
+           (32, $1, $1, 'PROJECT', 3, false, '{"name":"版本三"}'::jsonb, $2, TIMESTAMPTZ '2026-08-24T12:12:00Z')`,
+        [projectId, actorUserId]
+      );
+
+      await expect(
+        pool.query(
+          `INSERT INTO project_change_log (
+             commit_sequence, project_id, entity_id, entity_type, revision,
+             deleted, project_snapshot, actor_user_id, changed_at
+           ) VALUES (
+             33, $1, $1, 'PROJECT', 2, false, '{"name":"回退修订"}'::jsonb, $2, TIMESTAMPTZ '2026-08-24T12:13:00Z'
+           )`,
+          [projectId, actorUserId]
+        )
+      ).rejects.toThrow(/revision must increase/u);
+    });
+  });
+
+  it("enforces tombstone snapshot consistency", async () => {
+    await withTestDatabase(async (pool) => {
+      await runMigrations(pool, migrationsDirectory);
+
+      const projectId = randomUUID();
+      const actorUserId = randomUUID();
+
+      await pool.query(
+        `INSERT INTO projects (
+           id, name, year, type, status, phase, lifecycle, filing_status,
+           planned_completion_date, actual_completion_date,
+           created_at, created_by, updated_at, updated_by,
+           revision, commit_sequence, archived_at, archived_by
+         ) VALUES (
+           $1, '墓碑约束测试项目', 2026, '展览展示', '施工中', '实施', 'ACTIVE', '无需报建',
+           NULL, NULL,
+           TIMESTAMPTZ '2026-08-24T12:20:00Z', $2, TIMESTAMPTZ '2026-08-24T12:20:00Z', $2,
+           1, 40, NULL, NULL
+         )`,
+        [projectId, actorUserId]
+      );
+
+      await expect(
+        pool.query(
+          `INSERT INTO project_change_log (
+             commit_sequence, project_id, entity_id, entity_type, revision,
+             deleted, project_snapshot, actor_user_id, changed_at
+           ) VALUES (
+             41, $1, $1, 'PROJECT', 2, true, '{"name":"不允许墓碑快照"}'::jsonb, $2, TIMESTAMPTZ '2026-08-24T12:21:00Z'
+           )`,
+          [projectId, actorUserId]
+        )
       ).rejects.toThrow();
 
       await expect(
@@ -261,7 +343,7 @@ describe("002_project_sync migration", () => {
              commit_sequence, project_id, entity_id, entity_type, revision,
              deleted, project_snapshot, actor_user_id, changed_at
            ) VALUES (
-             24, $1, $1, 'PROJECT', 2, false, '{"name":"回退修订"}'::jsonb, $2, TIMESTAMPTZ '2026-08-24T12:04:00Z'
+             42, $1, $1, 'PROJECT', 2, false, NULL, $2, TIMESTAMPTZ '2026-08-24T12:22:00Z'
            )`,
           [projectId, actorUserId]
         )

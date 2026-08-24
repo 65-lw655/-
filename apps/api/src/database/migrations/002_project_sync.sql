@@ -47,8 +47,8 @@ CREATE INDEX project_change_log_project_commit_sequence_idx
 CREATE INDEX project_change_log_entity_commit_sequence_idx
   ON project_change_log (entity_type, entity_id, commit_sequence DESC);
 
-CREATE INDEX project_change_log_entity_revision_idx
-  ON project_change_log (entity_type, entity_id, revision DESC);
+CREATE UNIQUE INDEX project_change_log_entity_revision_key
+  ON project_change_log (entity_type, entity_id, revision);
 
 CREATE FUNCTION enforce_project_change_log_revision_monotonicity()
 RETURNS trigger
