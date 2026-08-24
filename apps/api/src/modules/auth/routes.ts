@@ -4,6 +4,7 @@ import type { ApiConfig } from "../../config.js";
 import type { MemberService } from "../projects/member-service.js";
 import { ProjectServiceError } from "../projects/project-service-error.js";
 import type { ProjectService } from "../projects/project-service.js";
+import type { SyncService } from "../sync/sync-service.js";
 import { ServiceError, type UserService } from "../users/user-service.js";
 import { AuthServiceError, type AuthService } from "./auth-service.js";
 
@@ -27,11 +28,14 @@ export type MemberApiService = Pick<
   | "removeMember"
 >;
 
+export type SyncApiService = Pick<SyncService, "pushProjects" | "pullProjects">;
+
 export interface ApiServices {
   authService: AuthService;
   userService: UserService;
   projectService: ProjectApiService;
   memberService: MemberApiService;
+  syncService?: SyncApiService;
   close?: () => Promise<void>;
 }
 
