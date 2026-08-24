@@ -338,6 +338,25 @@ npm run dev
 根启动命令会先构建共享领域包，再同时启动 Fastify API 和 Vite Web。Web 开发服务器将 `/api` 请求代理到本机 API。
 `VITE_DEV_API_PROXY_TARGET` 可在根目录 `.env` 中显式设置开发代理目标，默认为 `http://127.0.0.1:3000`。
 
+### 桌面端开发
+
+M4 桌面端使用 Tauri 2、Rust stable、Vite 和 React。首次运行前需要安装当前 Node 22、Rust stable，以及 Tauri 2 对应的 macOS 或 Windows 系统依赖。
+
+常用命令：
+
+```bash
+npm run dev --workspace @project-online/desktop
+npm run test -- --run apps/desktop
+npm run typecheck --workspace @project-online/desktop
+npm run build:web --workspace @project-online/desktop
+cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml
+npm run build:desktop --workspace @project-online/desktop
+```
+
+桌面本地数据由 Rust 侧固定写入应用数据目录内的 SQLite 文件，前端没有通用 SQL 或数据库路径入口。虚构本机项目种子只通过 development feature 暴露，用于本机验收；生产桌面入口不会自动注入示例数据。
+
+M4 只负责本机项目列表、详情、编辑和 Outbox 持久化。Outbox 暂不上传、不重试、不处理冲突，真正同步放在 M5。自动化测试只使用临时 SQLite 文件和内存凭证替身，不读取现有数据库，也不访问真实 Keychain 或 Windows Credential Manager。
+
 ### 验证
 
 提交前执行：
@@ -362,10 +381,10 @@ M3 最终验收使用隔离 PostgreSQL 16.15 和虚构数据完成：迁移连�
 | 工作区 | 当前职责 |
 | --- | --- |
 | `packages/domain` | 提供系统版本、账号状态、角色、项目模型与纯业务规则 |
-| `packages/ui` | 共享 UI 包边界，尚无组件库 |
+| `packages/ui` | Web 与桌面复用的项目列表、详情、编辑 UI 和仓储契约 |
 | `packages/sync` | 同步包边界，尚无同步实现 |
 | `apps/api` | Fastify 健康检查、账号、会话、用户管理及 PostgreSQL 项目业务 API |
 | `apps/web` | React 登录、账号管理、项目列表、详情、编辑、成员与审计界面 |
-| `apps/desktop` | 桌面包边界，尚未接入 Tauri |
+| `apps/desktop` | Tauri 桌面端、本机 SQLite 项目缓存、离线编辑 Outbox 与系统凭证适配 |
 
-M2 身份数据仍使用本机文件仓储；M3 仅将项目业务保存到 PostgreSQL。当前仍不包含旧数据迁移、离线编辑、文件上传、多实例生产存储或桌面安装包。
+M2 身份数据仍使用本机文件仓储；M3 仅将项目业务保存到 PostgreSQL。M4 已建立桌面离线编辑基础，但仍不包含 M5 同步上传/拉取、旧数据迁移、文件上传、多实例生产存储、签名安装包或自动更新。

@@ -12,7 +12,7 @@ use crate::credential::{CredentialError, CredentialStore};
 use crate::local_db::{LocalDatabase, LocalDbError};
 
 pub struct DesktopState {
-    database: Mutex<LocalDatabase>,
+    database: Result<Mutex<LocalDatabase>, CommandError>,
     credential_store: Box<dyn CredentialStore>,
 }
 
@@ -29,17 +29,31 @@ impl DesktopState {
         credential_store: impl CredentialStore + 'static,
     ) -> Self {
         Self {
-            database: Mutex::new(database),
+            database: Ok(Mutex::new(database)),
             credential_store: Box::new(credential_store),
         }
     }
 
+    pub fn initialization_failed(message: String) -> Self {
+        Self {
+            database: Err(CommandError {
+                code: "LOCAL_DB_INIT_FAILED",
+                message,
+                field_errors: None,
+            }),
+            credential_store: Box::new(crate::credential::system::SystemCredentialStore::default()),
+        }
+    }
+
     fn database(&self) -> Result<MutexGuard<'_, LocalDatabase>, CommandError> {
-        self.database.lock().map_err(|_| CommandError {
-            code: "LOCAL_DB_LOCK_FAILED",
-            message: "failed to lock local database".to_string(),
-            field_errors: None,
-        })
+        match &self.database {
+            Ok(database) => database.lock().map_err(|_| CommandError {
+                code: "LOCAL_DB_LOCK_FAILED",
+                message: "failed to lock local database".to_string(),
+                field_errors: None,
+            }),
+            Err(error) => Err(error.clone()),
+        }
     }
 
     pub fn credential_store(&self) -> &dyn CredentialStore {
@@ -47,7 +61,7 @@ impl DesktopState {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandError {
     pub code: &'static str,
@@ -83,5 +97,23 @@ impl From<CredentialError> for CommandError {
                 field_errors: None,
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DesktopState;
+
+    #[test]
+    fn failed_database_initialization_is_returned_to_commands() {
+        let state = DesktopState::initialization_failed("本机数据初始化失败".to_string());
+
+        let error = match state.database() {
+            Ok(_) => panic!("failed initialization should block database commands"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code, "LOCAL_DB_INIT_FAILED");
+        assert_eq!(error.message, "本机数据初始化失败");
     }
 }

@@ -13,9 +13,11 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default().setup(|app| {
-        let database_path = local_database_path(app)?;
-        let database = LocalDatabase::open(&database_path)?;
-        app.manage(DesktopState::new(database));
+        let state = match open_local_database(app) {
+            Ok(database) => DesktopState::new(database),
+            Err(_) => DesktopState::initialization_failed("本机数据初始化失败".to_string()),
+        };
+        app.manage(state);
         Ok(())
     });
 
@@ -45,6 +47,11 @@ pub fn run() {
     builder
         .run(tauri::generate_context!())
         .expect("failed to run desktop application");
+}
+
+fn open_local_database(app: &tauri::App) -> Result<LocalDatabase, Box<dyn Error>> {
+    let database_path = local_database_path(app)?;
+    Ok(LocalDatabase::open(&database_path)?)
 }
 
 fn local_database_path(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
