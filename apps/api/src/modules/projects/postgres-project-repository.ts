@@ -16,6 +16,8 @@ import {
   type ProjectStatus
 } from "@project-online/domain";
 import type {
+  ProjectChange,
+  ProjectSyncPayload,
   ProjectSyncResultStatus,
   PushProjectResult
 } from "@project-online/sync";
@@ -36,6 +38,7 @@ import type {
 } from "./project-repository.js";
 import type {
   AppendProjectChange,
+  ProjectChangeReadScope,
   ProjectSyncTransaction,
   StoredSyncOperationResult,
   WriteSyncOperationResult
@@ -116,6 +119,16 @@ interface SyncOperationResultRow extends QueryResultRow {
   error_code: string | null;
   created_at: string | Date;
   actor_user_id: string;
+}
+
+interface ProjectChangeRow extends QueryResultRow {
+  commit_sequence: string | number;
+  project_id: string;
+  entity_id: string;
+  entity_type: "PROJECT";
+  revision: number;
+  deleted: boolean;
+  project_snapshot: unknown;
 }
 
 interface ProjectFilters {
@@ -347,6 +360,52 @@ function mapSyncOperationResultRow(
   };
 }
 
+const projectSyncPayloadFields = new Set([
+  "name",
+  "year",
+  "type",
+  "status",
+  "phase",
+  "filingStatus",
+  "plannedCompletionDate",
+  "actualCompletionDate"
+]);
+
+function mapProjectSyncPayload(value: unknown): ProjectSyncPayload {
+  const parsed =
+    typeof value === "string" ? (JSON.parse(value) as unknown) : value;
+  if (
+    !isRecord(parsed) ||
+    Object.keys(parsed).length !== projectSyncPayloadFields.size ||
+    !Object.keys(parsed).every((key) => projectSyncPayloadFields.has(key)) ||
+    typeof parsed.name !== "string" ||
+    typeof parsed.year !== "number" ||
+    typeof parsed.type !== "string" ||
+    typeof parsed.status !== "string" ||
+    typeof parsed.phase !== "string" ||
+    typeof parsed.filingStatus !== "string" ||
+    (typeof parsed.plannedCompletionDate !== "string" &&
+      parsed.plannedCompletionDate !== null) ||
+    (typeof parsed.actualCompletionDate !== "string" &&
+      parsed.actualCompletionDate !== null)
+  ) {
+    throw new TypeError("PostgreSQL project change mapping failed");
+  }
+  return parsed as unknown as ProjectSyncPayload;
+}
+
+function mapProjectChangeRow(row: ProjectChangeRow): ProjectChange {
+  return {
+    type: row.entity_type,
+    entityId: row.entity_id,
+    projectId: row.project_id,
+    revision: row.revision,
+    commitSequence: toSafeNumber(row.commit_sequence),
+    deleted: row.deleted,
+    project: row.deleted ? null : mapProjectSyncPayload(row.project_snapshot)
+  };
+}
+
 function buildProjectFilters(
   scope: "ALL" | { userId: string },
   filters: ProjectListFilters
@@ -495,6 +554,38 @@ class PostgresProjectTransaction
         input.changedAt
       ]
     );
+  }
+
+  async listProjectChanges(
+    scope: ProjectChangeReadScope,
+    after: number,
+    limit: number
+  ): Promise<ProjectChange[]> {
+    const values: unknown[] = [after];
+    const visibilitySql =
+      scope === "ALL"
+        ? ""
+        : `AND EXISTS (
+             SELECT 1
+               FROM project_members pm
+              WHERE pm.project_id = project_change_log.project_id
+                AND pm.user_id = $2::uuid
+           )`;
+    if (scope !== "ALL") {
+      values.push(scope.userId);
+    }
+    values.push(limit);
+    const result = await this.client.query<ProjectChangeRow>(
+      `SELECT commit_sequence, project_id, entity_id, entity_type, revision,
+              deleted, project_snapshot
+         FROM project_change_log
+        WHERE commit_sequence > $1
+        ${visibilitySql}
+        ORDER BY commit_sequence ASC
+        LIMIT $${values.length}`,
+      values
+    );
+    return result.rows.map(mapProjectChangeRow);
   }
 
   async getAccess(

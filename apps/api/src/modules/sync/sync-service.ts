@@ -11,7 +11,10 @@ import {
 } from "@project-online/domain";
 import {
   PROTOCOL_VERSION,
+  isPullProjectsQuery,
   isProjectSyncOperation,
+  type PullProjectsQuery,
+  type PullProjectsResponse,
   type ProjectSyncOperation,
   type ProjectSyncPayload,
   type ProjectSyncResultStatus,
@@ -157,6 +160,38 @@ export class SyncService {
       results.push(await this.pushOne(principal, request.deviceId, operation));
     }
     return { protocolVersion: PROTOCOL_VERSION, results };
+  }
+
+  async pullProjects(
+    principal: AuthenticatedPrincipal,
+    query: PullProjectsQuery
+  ): Promise<PullProjectsResponse> {
+    if (!isPullProjectsQuery(query)) {
+      throw new TypeError("Invalid project sync pull query");
+    }
+
+    await this.isAllowed(
+      principal,
+      {
+        projectId: null,
+        projectExists: true,
+        memberRole: principal.role === "USER" ? "VIEWER" : null
+      },
+      "PROJECT_LIST"
+    );
+
+    const scope =
+      principal.role === "USER" ? { userId: principal.userId } : "ALL";
+    const changes = await this.repository.transaction((transaction) =>
+      transaction.listProjectChanges(scope, query.after, query.limit + 1)
+    );
+    const page = changes.slice(0, query.limit);
+    return {
+      protocolVersion: PROTOCOL_VERSION,
+      changes: page,
+      nextCursor: page.at(-1)?.commitSequence ?? query.after,
+      hasMore: changes.length > query.limit
+    };
   }
 
   private pushOne(

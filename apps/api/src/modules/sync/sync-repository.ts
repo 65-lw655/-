@@ -1,6 +1,7 @@
 import type { ProjectRecord } from "@project-online/domain";
 import type {
   PROJECT_ENTITY_TYPE,
+  ProjectChange,
   ProjectSyncPayload,
   ProjectSyncResultStatus,
   PushProjectResult
@@ -49,6 +50,8 @@ export interface AppendProjectChange {
   changedAt: string;
 }
 
+export type ProjectChangeReadScope = "ALL" | { userId: string };
+
 export interface ProjectSyncTransaction extends ProjectTransaction {
   lockSyncOperationResult(deviceId: string, operationId: string): Promise<void>;
   findSyncOperationResult(
@@ -60,6 +63,11 @@ export interface ProjectSyncTransaction extends ProjectTransaction {
   ): Promise<ProjectRecord | null>;
   writeSyncOperationResult(input: WriteSyncOperationResult): Promise<void>;
   appendProjectChange(input: AppendProjectChange): Promise<void>;
+  listProjectChanges(
+    scope: ProjectChangeReadScope,
+    after: number,
+    limit: number
+  ): Promise<ProjectChange[]>;
 }
 
 export interface ProjectSyncRepository {
