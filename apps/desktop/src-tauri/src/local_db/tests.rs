@@ -11,7 +11,7 @@ fn opening_empty_file_applies_migration_and_creates_stable_device() {
 
     let db = LocalDatabase::open(&db_path).expect("open local database");
 
-    assert_eq!(db.schema_version().expect("schema version"), 1);
+    assert_eq!(db.schema_version().expect("schema version"), 2);
     let settings = db.device_settings().expect("device settings");
     assert!(!settings.device_id.is_nil());
     assert_eq!(settings.next_client_sequence, 1);
@@ -718,4 +718,113 @@ fn install_outbox_abort_trigger(path: &Path) {
              END;",
         )
         .expect("install outbox abort trigger");
+}
+
+#[test]
+fn sync_state_reads_pending_outbox_and_records_retry_without_losing_operation() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let db_path = temp_dir.path().join("local.sqlite");
+    let db = LocalDatabase::open(&db_path).expect("open local database");
+    insert_project_fixture(
+        &db_path,
+        ProjectFixture {
+            id: "00000000-0000-4000-8000-000000000010",
+            name: "待同步项目",
+            year: 2026,
+            status: "施工中",
+            lifecycle: "ACTIVE",
+            local_updated_at: "2026-08-24T10:00:00.000Z",
+            commit_sequence: 1,
+            sync_state: "PENDING",
+            can_edit: 1,
+        },
+    );
+    insert_outbox_fixture(&db_path, "op-1", "00000000-0000-4000-8000-000000000010");
+
+    let pending = db.pending_outbox(10).expect("read pending outbox");
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].operation_id, "op-1");
+    assert_eq!(pending[0].attempts, 0);
+
+    db.record_outbox_failure("op-1", "network unavailable")
+        .expect("record retry");
+    let retry = db.pending_outbox(10).expect("read retry outbox");
+    assert_eq!(retry[0].attempts, 1);
+    assert_eq!(retry[0].last_error.as_deref(), Some("network unavailable"));
+}
+
+#[test]
+fn sync_state_acknowledges_outbox_and_persists_pull_cursor() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let db_path = temp_dir.path().join("local.sqlite");
+    let db = LocalDatabase::open(&db_path).expect("open local database");
+    insert_project_fixture(
+        &db_path,
+        ProjectFixture {
+            id: "00000000-0000-4000-8000-000000000011",
+            name: "已同步项目",
+            year: 2026,
+            status: "施工中",
+            lifecycle: "ACTIVE",
+            local_updated_at: "2026-08-24T10:00:00.000Z",
+            commit_sequence: 1,
+            sync_state: "PENDING",
+            can_edit: 1,
+        },
+    );
+    insert_outbox_fixture(&db_path, "op-2", "00000000-0000-4000-8000-000000000011");
+
+    db.acknowledge_outbox("op-2").expect("acknowledge outbox");
+    assert!(db.pending_outbox(10).expect("read outbox").is_empty());
+    assert_eq!(db.pull_cursor().expect("read cursor"), 0);
+    db.advance_pull_cursor(12).expect("advance cursor");
+    assert_eq!(db.pull_cursor().expect("read cursor"), 12);
+}
+
+fn insert_outbox_fixture(path: &Path, operation_id: &str, project_id: &str) {
+    let connection = rusqlite::Connection::open(path).expect("open sqlite");
+    connection
+        .execute(
+            "INSERT INTO sync_outbox (
+                operation_id, protocol_version, device_id, client_sequence,
+                entity_type, entity_id, project_id, action, base_revision,
+                payload_json, created_at
+             ) VALUES (?1, 1, '00000000-0000-4000-8000-000000000099', 1,
+                'PROJECT', ?2, ?2, 'UPSERT', 1, '{}', datetime('now'))",
+            rusqlite::params![operation_id, project_id],
+        )
+        .expect("insert outbox fixture");
+}
+
+#[test]
+fn sync_state_applies_a_pulled_project_and_advances_cursor_atomically() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let db_path = temp_dir.path().join("local.sqlite");
+    let db = LocalDatabase::open(&db_path).expect("open local database");
+    let project_id = "00000000-0000-4000-8000-000000000012";
+
+    db.apply_project_change(
+        project_id,
+        2,
+        18,
+        false,
+        Some(serde_json::json!({
+            "name": "服务端同步项目",
+            "year": 2026,
+            "type": "展览展示",
+            "status": "施工中",
+            "phase": "现场实施",
+            "filingStatus": "无需报建",
+            "plannedCompletionDate": "2026-12-31",
+            "actualCompletionDate": null
+        })),
+    )
+    .expect("apply project change");
+
+    let project = db.get_project(project_id).expect("read applied project");
+    assert_eq!(project.project.name, "服务端同步项目");
+    assert_eq!(project.project.revision, 2);
+    assert_eq!(project.project.commit_sequence, 18);
+    assert_eq!(project.sync_state, "SYNCED");
+    assert_eq!(db.pull_cursor().expect("read cursor"), 18);
 }

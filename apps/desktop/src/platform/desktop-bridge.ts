@@ -7,6 +7,21 @@ export interface LocalStatus {
   pendingCount: number;
 }
 
+export interface PendingOutboxItem {
+  operationId: string;
+  protocolVersion: number;
+  deviceId: string;
+  clientSequence: number;
+  entityType: "PROJECT";
+  entityId: string;
+  projectId: string;
+  action: "UPSERT" | "DELETE";
+  baseRevision: number;
+  payloadJson: string;
+  attempts: number;
+  lastError: string | null;
+}
+
 export type CredentialStatus = "PRESENT" | "MISSING" | "UNAVAILABLE";
 
 export interface DesktopBridge {
@@ -17,6 +32,18 @@ export interface DesktopBridge {
     input: ProjectInput
   ): Promise<ProjectDetails>;
   getLocalStatus(): Promise<LocalStatus>;
+  pendingOutbox?(limit: number): Promise<PendingOutboxItem[]>;
+  acknowledgeOutbox?(operationId: string): Promise<void>;
+  recordOutboxFailure?(operationId: string, message: string): Promise<void>;
+  getSyncCursor?(): Promise<number>;
+  advanceSyncCursor?(cursor: number): Promise<void>;
+  applyProjectChange?(input: {
+    projectId: string;
+    revision: number;
+    commitSequence: number;
+    deleted: boolean;
+    project: Record<string, unknown> | null;
+  }): Promise<void>;
   credentialStatus(): Promise<CredentialStatus>;
   saveCredential(credential: string): Promise<CredentialStatus>;
   deleteCredential(): Promise<CredentialStatus>;
@@ -41,6 +68,17 @@ export function createDesktopBridge(
         input
       }),
     getLocalStatus: () => invokeCommand<LocalStatus>("get_local_status"),
+    pendingOutbox: (limit) =>
+      invokeCommand<PendingOutboxItem[]>("list_pending_outbox", { limit }),
+    acknowledgeOutbox: (operationId) =>
+      invokeCommand<void>("acknowledge_outbox", { operationId }),
+    recordOutboxFailure: (operationId, message) =>
+      invokeCommand<void>("record_outbox_failure", { operationId, message }),
+    getSyncCursor: () => invokeCommand<number>("get_sync_cursor"),
+    advanceSyncCursor: (cursor) =>
+      invokeCommand<void>("advance_sync_cursor", { cursor }),
+    applyProjectChange: (input) =>
+      invokeCommand<void>("apply_project_change", { input }),
     credentialStatus: () =>
       invokeCommand<CredentialStatus>("credential_status"),
     saveCredential: (credential) =>

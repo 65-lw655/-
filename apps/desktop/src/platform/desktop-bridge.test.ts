@@ -79,6 +79,72 @@ function projectInput(): ProjectInput {
 }
 
 describe("desktop bridge", () => {
+  it("reads pending sync operations from the local outbox", async () => {
+    const outbox = [
+      {
+        operationId: "00000000-0000-4000-8000-000000000001",
+        deviceId: "00000000-0000-4000-8000-000000000002",
+        clientSequence: 1,
+        entityType: "PROJECT",
+        entityId: "00000000-0000-4000-8000-000000000003",
+        projectId: "00000000-0000-4000-8000-000000000003",
+        action: "UPSERT",
+        baseRevision: 1,
+        payloadJson: "{}",
+        attempts: 0,
+        lastError: null
+      }
+    ];
+    const { invoke, spy } = invokeReturning(outbox);
+    const bridge = createDesktopBridge(invoke);
+
+    await expect(bridge.pendingOutbox!(10)).resolves.toEqual(outbox);
+    expect(spy).toHaveBeenCalledWith("list_pending_outbox", { limit: 10 });
+  });
+
+  it("acknowledges a successful sync operation and advances the pull cursor", async () => {
+    const { invoke, spy } = invokeReturning(undefined);
+    const bridge = createDesktopBridge(invoke);
+
+    await bridge.acknowledgeOutbox!("operation-1");
+    await bridge.advanceSyncCursor!(12);
+
+    expect(spy).toHaveBeenNthCalledWith(1, "acknowledge_outbox", {
+      operationId: "operation-1"
+    });
+    expect(spy).toHaveBeenNthCalledWith(2, "advance_sync_cursor", {
+      cursor: 12
+    });
+  });
+
+  it("records a failed sync operation for a later retry", async () => {
+    const { invoke, spy } = invokeReturning(undefined);
+    const bridge = createDesktopBridge(invoke);
+
+    await bridge.recordOutboxFailure!("operation-1", "network unavailable");
+
+    expect(spy).toHaveBeenCalledWith("record_outbox_failure", {
+      operationId: "operation-1",
+      message: "network unavailable"
+    });
+  });
+
+  it("applies a pulled project change through one local command", async () => {
+    const { invoke, spy } = invokeReturning(undefined);
+    const bridge = createDesktopBridge(invoke);
+    const input = {
+      projectId: "project-1",
+      revision: 2,
+      commitSequence: 12,
+      deleted: false,
+      project: { name: "服务端项目" }
+    };
+
+    await bridge.applyProjectChange!(input);
+
+    expect(spy).toHaveBeenCalledWith("apply_project_change", { input });
+  });
+
   it("invokes list_local_projects with camelCase filters", async () => {
     const filters: ProjectListFilters = {
       page: 2,

@@ -30,7 +30,13 @@ pub fn run() {
         commands::credential::credential_status,
         commands::credential::save_credential,
         commands::credential::delete_credential,
-        commands::status::get_local_status
+        commands::status::get_local_status,
+        commands::sync::list_pending_outbox,
+        commands::sync::acknowledge_outbox,
+        commands::sync::record_outbox_failure,
+        commands::sync::get_sync_cursor,
+        commands::sync::advance_sync_cursor,
+        commands::sync::apply_project_change
     ]);
 
     #[cfg(not(feature = "development"))]
@@ -41,7 +47,13 @@ pub fn run() {
         commands::credential::credential_status,
         commands::credential::save_credential,
         commands::credential::delete_credential,
-        commands::status::get_local_status
+        commands::status::get_local_status,
+        commands::sync::list_pending_outbox,
+        commands::sync::acknowledge_outbox,
+        commands::sync::record_outbox_failure,
+        commands::sync::get_sync_cursor,
+        commands::sync::advance_sync_cursor,
+        commands::sync::apply_project_change
     ]);
 
     builder

@@ -9,7 +9,7 @@ pub(crate) mod fictional_seed;
 use std::fmt;
 use std::path::Path;
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use thiserror::Error;
 use uuid::Uuid;
@@ -25,6 +25,22 @@ mod tests;
 
 pub struct LocalDatabase {
     connection: Connection,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingOutboxItem {
+    pub operation_id: String,
+    pub protocol_version: i64,
+    pub device_id: String,
+    pub client_sequence: i64,
+    pub entity_type: String,
+    pub entity_id: String,
+    pub project_id: String,
+    pub action: String,
+    pub base_revision: i64,
+    pub payload_json: String,
+    pub attempts: i64,
+    pub last_error: Option<String>,
 }
 
 impl fmt::Debug for LocalDatabase {
@@ -134,6 +150,233 @@ impl LocalDatabase {
         self.connection
             .query_row("SELECT COUNT(*) FROM sync_outbox", [], |row| row.get(0))
             .map_err(LocalDbError::State)
+    }
+
+    pub fn pending_outbox(&self, limit: i64) -> Result<Vec<PendingOutboxItem>, LocalDbError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT operation_id, protocol_version, device_id, client_sequence,
+                        entity_type, entity_id, project_id, action, base_revision,
+                        payload_json, attempts, last_error
+                 FROM sync_outbox
+                 ORDER BY client_sequence ASC
+                 LIMIT ?1",
+            )
+            .map_err(LocalDbError::State)?;
+        let rows = statement
+            .query_map([limit.clamp(1, 100)], |row| {
+                Ok(PendingOutboxItem {
+                    operation_id: row.get(0)?,
+                    protocol_version: row.get(1)?,
+                    device_id: row.get(2)?,
+                    client_sequence: row.get(3)?,
+                    entity_type: row.get(4)?,
+                    entity_id: row.get(5)?,
+                    project_id: row.get(6)?,
+                    action: row.get(7)?,
+                    base_revision: row.get(8)?,
+                    payload_json: row.get(9)?,
+                    attempts: row.get(10)?,
+                    last_error: row.get(11)?,
+                })
+            })
+            .map_err(LocalDbError::State)?;
+        rows.map(|row| row.map_err(LocalDbError::State)).collect()
+    }
+
+    pub fn record_outbox_failure(
+        &self,
+        operation_id: &str,
+        message: &str,
+    ) -> Result<(), LocalDbError> {
+        self.connection
+            .execute(
+                "UPDATE sync_outbox
+                 SET attempts = attempts + 1, last_error = ?1
+                 WHERE operation_id = ?2",
+                params![message, operation_id],
+            )
+            .map_err(LocalDbError::LocalWriteFailed)?;
+        Ok(())
+    }
+
+    pub fn acknowledge_outbox(&self, operation_id: &str) -> Result<(), LocalDbError> {
+        self.connection
+            .execute(
+                "DELETE FROM sync_outbox WHERE operation_id = ?1",
+                params![operation_id],
+            )
+            .map_err(LocalDbError::LocalWriteFailed)?;
+        Ok(())
+    }
+
+    pub fn pull_cursor(&self) -> Result<i64, LocalDbError> {
+        self.connection
+            .query_row(
+                "SELECT project_commit_sequence FROM sync_cursor WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(LocalDbError::State)
+    }
+
+    pub fn advance_pull_cursor(&self, cursor: i64) -> Result<(), LocalDbError> {
+        self.connection
+            .execute(
+                "UPDATE sync_cursor
+                 SET project_commit_sequence = MAX(project_commit_sequence, ?1)
+                 WHERE id = 1",
+                params![cursor.max(0)],
+            )
+            .map_err(LocalDbError::LocalWriteFailed)?;
+        Ok(())
+    }
+
+    pub fn apply_project_change(
+        &self,
+        project_id: &str,
+        revision: i64,
+        commit_sequence: i64,
+        deleted: bool,
+        payload: Option<serde_json::Value>,
+    ) -> Result<(), LocalDbError> {
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(LocalDbError::LocalWriteFailed)?;
+
+        if deleted {
+            transaction
+                .execute(
+                    "DELETE FROM sync_outbox WHERE project_id = ?1",
+                    params![project_id],
+                )
+                .map_err(LocalDbError::LocalWriteFailed)?;
+            transaction
+                .execute(
+                    "DELETE FROM local_projects WHERE id = ?1",
+                    params![project_id],
+                )
+                .map_err(LocalDbError::LocalWriteFailed)?;
+        } else {
+            let payload = payload.ok_or(LocalDbError::CorruptProject)?;
+            let name = json_string(&payload, "name")?;
+            let year = json_i64(&payload, "year")?;
+            let project_type = json_string(&payload, "type")?;
+            let status = json_string(&payload, "status")?;
+            let phase = json_string(&payload, "phase")?;
+            let filing_status = json_string(&payload, "filingStatus")?;
+            let planned_completion_date = json_optional_string(&payload, "plannedCompletionDate")?;
+            let actual_completion_date = json_optional_string(&payload, "actualCompletionDate")?;
+            let exists: Option<i64> = transaction
+                .query_row(
+                    "SELECT revision FROM local_projects WHERE id = ?1",
+                    params![project_id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(LocalDbError::LocalWriteFailed)?;
+
+            if exists.map_or(true, |current| revision > current) {
+                if exists.is_some() {
+                    transaction
+                        .execute(
+                            "UPDATE local_projects
+                             SET name = ?1, year = ?2, type = ?3, status = ?4,
+                                 phase = ?5, filing_status = ?6,
+                                 planned_completion_date = ?7,
+                                 actual_completion_date = ?8,
+                                 revision = ?9, commit_sequence = ?10,
+                                 local_updated_at = datetime('now'),
+                                 sync_state = 'SYNCED'
+                             WHERE id = ?11",
+                            params![
+                                name,
+                                year,
+                                project_type,
+                                status,
+                                phase,
+                                filing_status,
+                                planned_completion_date,
+                                actual_completion_date,
+                                revision,
+                                commit_sequence,
+                                project_id
+                            ],
+                        )
+                        .map_err(LocalDbError::LocalWriteFailed)?;
+                } else {
+                    transaction
+                        .execute(
+                            "INSERT INTO local_projects (
+                                id, name, year, type, status, phase, lifecycle,
+                                filing_status, planned_completion_date,
+                                actual_completion_date, created_at, created_by,
+                                updated_at, updated_by, revision, commit_sequence,
+                                archived_at, archived_by, can_edit, local_updated_at,
+                                sync_state
+                             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'ACTIVE', ?7, ?8,
+                                ?9, datetime('now'), 'server-sync', datetime('now'),
+                                'server-sync', ?10, ?11, NULL, NULL, 0,
+                                datetime('now'), 'SYNCED')",
+                            params![
+                                project_id,
+                                name,
+                                year,
+                                project_type,
+                                status,
+                                phase,
+                                filing_status,
+                                planned_completion_date,
+                                actual_completion_date,
+                                revision,
+                                commit_sequence
+                            ],
+                        )
+                        .map_err(LocalDbError::LocalWriteFailed)?;
+                }
+            }
+        }
+
+        transaction
+            .execute(
+                "UPDATE sync_cursor
+                 SET project_commit_sequence = MAX(project_commit_sequence, ?1)
+                 WHERE id = 1",
+                params![commit_sequence.max(0)],
+            )
+            .map_err(LocalDbError::LocalWriteFailed)?;
+        transaction.commit().map_err(LocalDbError::LocalWriteFailed)
+    }
+}
+
+fn json_string(payload: &serde_json::Value, field: &str) -> Result<String, LocalDbError> {
+    payload
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .map(ToOwned::to_owned)
+        .ok_or(LocalDbError::CorruptProject)
+}
+
+fn json_i64(payload: &serde_json::Value, field: &str) -> Result<i64, LocalDbError> {
+    payload
+        .get(field)
+        .and_then(serde_json::Value::as_i64)
+        .ok_or(LocalDbError::CorruptProject)
+}
+
+fn json_optional_string(
+    payload: &serde_json::Value,
+    field: &str,
+) -> Result<Option<String>, LocalDbError> {
+    match payload.get(field) {
+        Some(value) if value.is_null() => Ok(None),
+        Some(value) => value
+            .as_str()
+            .map(|text| Some(text.to_string()))
+            .ok_or(LocalDbError::CorruptProject),
+        None => Err(LocalDbError::CorruptProject),
     }
 }
 

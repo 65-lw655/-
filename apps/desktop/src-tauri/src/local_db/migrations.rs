@@ -2,11 +2,18 @@ use rusqlite::{params, Connection};
 
 use super::LocalDbError;
 
-pub(crate) const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    description: "m4 desktop offline foundation",
-    sql: include_str!("../../migrations/001_m4_foundation.sql"),
-}];
+pub(crate) const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        description: "m4 desktop offline foundation",
+        sql: include_str!("../../migrations/001_m4_foundation.sql"),
+    },
+    Migration {
+        version: 2,
+        description: "m5 project sync state",
+        sql: include_str!("../../migrations/002_m5_sync.sql"),
+    },
+];
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Migration {

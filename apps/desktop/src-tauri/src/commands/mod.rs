@@ -1,6 +1,7 @@
 pub mod credential;
 pub mod projects;
 pub mod status;
+pub mod sync;
 
 use std::sync::{Mutex, MutexGuard};
 
