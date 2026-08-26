@@ -373,7 +373,7 @@ M4 只负责本机项目列表、详情、编辑和 Outbox 持久化。Outbox �
 npm run verify
 ```
 
-该命令依次执行 lint、格式检查、类型检查、非数据库测试和全部工作区构建。`npm run test:db` 必须使用与开发库分离、允许创建和删除临时 schema 的隔离测试数据库；先将 `TEST_DATABASE_URL` 设为该测试库的占位地址对应本机值，再单独执行：
+该命令依次执行 lint、格式检查、类型检查、非数据库测试和全部工作区构建，不需要 `TEST_DATABASE_URL`。数据库测试统一命名为 `*.integration.test.ts`，通过 `npm run test:db` 执行；`npm run test:db` 必须使用与开发库分离、允许创建和删除临时 schema 的隔离测试数据库。先将 `TEST_DATABASE_URL` 设为该测试库的占位地址对应本机值，再单独执行：
 
 桌面端 M4 门禁可单独执行：
 

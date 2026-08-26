@@ -43,7 +43,7 @@
 
 **Files:**
 - Create: `apps/api/src/database/migrations/002_project_sync.sql`
-- Create: `apps/api/src/database/migrations/002_project_sync.test.ts`
+- Create: `apps/api/src/database/migrations/002_project_sync.integration.test.ts`
 
 **Interfaces:**
 - Creates `sync_operation_results` keyed by `(device_id, operation_id)`, storing the immutable result JSON and status.
@@ -60,7 +60,7 @@
 **Files:**
 - Create: `apps/api/src/modules/sync/sync-repository.ts`
 - Create: `apps/api/src/modules/sync/sync-service.ts`
-- Create: `apps/api/src/modules/sync/sync-service.test.ts`
+- Create: `apps/api/src/modules/sync/sync-service.integration.test.ts`
 - Modify: `apps/api/src/modules/projects/project-repository.ts`
 - Modify: `apps/api/src/modules/projects/postgres-project-repository.ts`
 
@@ -80,7 +80,7 @@
 **Files:**
 - Modify: `apps/api/src/modules/sync/sync-repository.ts`
 - Modify: `apps/api/src/modules/sync/sync-service.ts`
-- Create: `apps/api/src/modules/sync/sync-pull.test.ts`
+- Create: `apps/api/src/modules/sync/sync-pull.integration.test.ts`
 
 **Interfaces:**
 - `SyncService.pullProjects(principal, query): Promise<PullProjectsResponse>`.
@@ -116,6 +116,7 @@
 ### Task 6: End-to-end isolated acceptance and documentation
 
 **Files:**
+- Create: `apps/api/src/modules/sync/http.integration.test.ts`
 - Modify: `apps/api/src/modules/sync/http.test.ts`
 - Modify: `docs/architecture/sync-protocol.md`
 - Modify: `README.md`
