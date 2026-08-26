@@ -4,6 +4,7 @@ import type { SessionUser } from "../auth/auth-client.js";
 import { ProjectDetailView } from "./ProjectDetailView.js";
 import { ProjectEditorDialog } from "./ProjectEditorDialog.js";
 import { ProjectListView } from "./ProjectListView.js";
+import { createOnlineProjectRepository } from "./online-project-repository.js";
 import { createProjectsClient } from "./projects-client.js";
 
 export interface ProjectsViewProps {
@@ -25,6 +26,10 @@ export function ProjectsView({
     () => createProjectsClient(apiBaseUrl, fetchImpl),
     [apiBaseUrl, fetchImpl]
   );
+  const repository = useMemo(
+    () => createOnlineProjectRepository(client),
+    [client]
+  );
   const [createOpen, setCreateOpen] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
@@ -41,6 +46,7 @@ export function ProjectsView({
         }}
         onSessionExpired={onSessionExpired}
         projectId={selectedProjectId}
+        repository={repository}
       />
     );
   }
@@ -55,6 +61,7 @@ export function ProjectsView({
           onOpenProject(projectId);
         }}
         onSessionExpired={onSessionExpired}
+        repository={repository}
         refreshToken={refreshToken}
         sessionRole={sessionUser.role}
       />
@@ -65,6 +72,7 @@ export function ProjectsView({
           onClose={() => setCreateOpen(false)}
           onSaved={() => setRefreshToken((value) => value + 1)}
           onSessionExpired={onSessionExpired}
+          repository={repository}
         />
       ) : null}
     </>

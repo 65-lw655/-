@@ -15,6 +15,12 @@ import {
   type ProjectRecord,
   type ProjectStatus
 } from "@project-online/domain";
+import type {
+  ProjectChange,
+  ProjectSyncPayload,
+  ProjectSyncResultStatus,
+  PushProjectResult
+} from "@project-online/sync";
 import type { Pool, PoolClient, QueryResultRow } from "pg";
 
 import type {
@@ -30,6 +36,13 @@ import type {
   UpdateMemberRecord,
   UpdateProjectRecord
 } from "./project-repository.js";
+import type {
+  AppendProjectChange,
+  ProjectChangeReadScope,
+  ProjectSyncTransaction,
+  StoredSyncOperationResult,
+  WriteSyncOperationResult
+} from "../sync/sync-repository.js";
 
 interface ProjectRow extends QueryResultRow {
   id: string;
@@ -93,6 +106,29 @@ interface CountRow extends QueryResultRow {
 
 interface SequenceRow extends QueryResultRow {
   value: string | number;
+}
+
+interface SyncOperationResultRow extends QueryResultRow {
+  device_id: string;
+  operation_id: string;
+  project_id: string;
+  entity_id: string;
+  entity_type: "PROJECT";
+  status: ProjectSyncResultStatus;
+  result_payload: unknown;
+  error_code: string | null;
+  created_at: string | Date;
+  actor_user_id: string;
+}
+
+interface ProjectChangeRow extends QueryResultRow {
+  commit_sequence: string | number;
+  project_id: string;
+  entity_id: string;
+  entity_type: "PROJECT";
+  revision: number;
+  deleted: boolean;
+  project_snapshot: unknown;
 }
 
 interface ProjectFilters {
@@ -304,6 +340,72 @@ function mapProjectAuditRow(row: ProjectAuditRow): ProjectAuditEvent {
   };
 }
 
+function mapSyncOperationResultRow(
+  row: SyncOperationResultRow
+): StoredSyncOperationResult {
+  if (!isRecord(row.result_payload)) {
+    throw new TypeError("PostgreSQL sync operation result mapping failed");
+  }
+  return {
+    deviceId: row.device_id,
+    operationId: row.operation_id,
+    projectId: row.project_id,
+    entityId: row.entity_id,
+    entityType: row.entity_type,
+    status: row.status,
+    result: row.result_payload as unknown as PushProjectResult,
+    errorCode: row.error_code,
+    createdAt: toIsoString(row.created_at),
+    actorUserId: row.actor_user_id
+  };
+}
+
+const projectSyncPayloadFields = new Set([
+  "name",
+  "year",
+  "type",
+  "status",
+  "phase",
+  "filingStatus",
+  "plannedCompletionDate",
+  "actualCompletionDate"
+]);
+
+function mapProjectSyncPayload(value: unknown): ProjectSyncPayload {
+  const parsed =
+    typeof value === "string" ? (JSON.parse(value) as unknown) : value;
+  if (
+    !isRecord(parsed) ||
+    Object.keys(parsed).length !== projectSyncPayloadFields.size ||
+    !Object.keys(parsed).every((key) => projectSyncPayloadFields.has(key)) ||
+    typeof parsed.name !== "string" ||
+    typeof parsed.year !== "number" ||
+    typeof parsed.type !== "string" ||
+    typeof parsed.status !== "string" ||
+    typeof parsed.phase !== "string" ||
+    typeof parsed.filingStatus !== "string" ||
+    (typeof parsed.plannedCompletionDate !== "string" &&
+      parsed.plannedCompletionDate !== null) ||
+    (typeof parsed.actualCompletionDate !== "string" &&
+      parsed.actualCompletionDate !== null)
+  ) {
+    throw new TypeError("PostgreSQL project change mapping failed");
+  }
+  return parsed as unknown as ProjectSyncPayload;
+}
+
+function mapProjectChangeRow(row: ProjectChangeRow): ProjectChange {
+  return {
+    type: row.entity_type,
+    entityId: row.entity_id,
+    projectId: row.project_id,
+    revision: row.revision,
+    commitSequence: toSafeNumber(row.commit_sequence),
+    deleted: row.deleted,
+    project: row.deleted ? null : mapProjectSyncPayload(row.project_snapshot)
+  };
+}
+
 function buildProjectFilters(
   scope: "ALL" | { userId: string },
   filters: ProjectListFilters
@@ -337,8 +439,154 @@ function buildProjectFilters(
   };
 }
 
-class PostgresProjectTransaction implements ProjectTransaction {
+class PostgresProjectTransaction
+  implements ProjectTransaction, ProjectSyncTransaction
+{
   constructor(private readonly client: PoolClient) {}
+
+  async lockSyncOperationResult(
+    deviceId: string,
+    operationId: string
+  ): Promise<void> {
+    await this.client.query(
+      "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+      [deviceId, operationId]
+    );
+  }
+
+  async findSyncOperationResult(
+    deviceId: string,
+    operationId: string
+  ): Promise<StoredSyncOperationResult | null> {
+    const result = await this.client.query<SyncOperationResultRow>(
+      `SELECT device_id, operation_id, project_id, entity_id, entity_type,
+              status, result_payload, error_code, created_at, actor_user_id
+         FROM sync_operation_results
+        WHERE device_id = $1
+          AND operation_id = $2`,
+      [deviceId, operationId]
+    );
+    const row = result.rows[0];
+    return row === undefined ? null : mapSyncOperationResultRow(row);
+  }
+
+  async upsertProjectFromSync(
+    input: UpdateProjectRecord
+  ): Promise<ProjectRecord | null> {
+    const result = await this.client.query<ProjectRow>(
+      `UPDATE projects
+          SET name = $2,
+              year = $3,
+              type = $4,
+              status = $5,
+              phase = $6,
+              filing_status = $7,
+              planned_completion_date = $8,
+              actual_completion_date = $9,
+              lifecycle = 'ACTIVE',
+              updated_at = $10,
+              updated_by = $11,
+              revision = revision + 1,
+              commit_sequence = $12,
+              archived_at = NULL,
+              archived_by = NULL
+        WHERE id = $1
+        RETURNING ${projectColumns}`,
+      [
+        input.projectId,
+        input.name,
+        input.year,
+        input.type,
+        input.status,
+        input.phase,
+        input.filingStatus,
+        input.plannedCompletionDate,
+        input.actualCompletionDate,
+        input.occurredAt,
+        input.actorUserId,
+        input.commitSequence
+      ]
+    );
+    const row = result.rows[0];
+    return row === undefined ? null : mapProjectRow(row);
+  }
+
+  async writeSyncOperationResult(
+    input: WriteSyncOperationResult
+  ): Promise<void> {
+    await this.client.query(
+      `INSERT INTO sync_operation_results (
+         device_id, operation_id, project_id, entity_id, entity_type,
+         status, result_payload, error_code, created_at, actor_user_id
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)`,
+      [
+        input.deviceId,
+        input.operationId,
+        input.projectId,
+        input.entityId,
+        input.entityType,
+        input.status,
+        JSON.stringify(input.result),
+        input.errorCode,
+        input.createdAt,
+        input.actorUserId
+      ]
+    );
+  }
+
+  async appendProjectChange(input: AppendProjectChange): Promise<void> {
+    await this.client.query(
+      `INSERT INTO project_change_log (
+         commit_sequence, project_id, entity_id, entity_type, revision,
+         deleted, project_snapshot, actor_user_id, changed_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)`,
+      [
+        input.commitSequence,
+        input.projectId,
+        input.entityId,
+        input.entityType,
+        input.revision,
+        input.deleted,
+        input.projectSnapshot === null
+          ? null
+          : JSON.stringify(input.projectSnapshot),
+        input.actorUserId,
+        input.changedAt
+      ]
+    );
+  }
+
+  async listProjectChanges(
+    scope: ProjectChangeReadScope,
+    after: number,
+    limit: number
+  ): Promise<ProjectChange[]> {
+    const values: unknown[] = [after];
+    const visibilitySql =
+      scope === "ALL"
+        ? ""
+        : `AND EXISTS (
+             SELECT 1
+               FROM project_members pm
+              WHERE pm.project_id = project_change_log.project_id
+                AND pm.user_id = $2::uuid
+           )`;
+    if (scope !== "ALL") {
+      values.push(scope.userId);
+    }
+    values.push(limit);
+    const result = await this.client.query<ProjectChangeRow>(
+      `SELECT commit_sequence, project_id, entity_id, entity_type, revision,
+              deleted, project_snapshot
+         FROM project_change_log
+        WHERE commit_sequence > $1
+        ${visibilitySql}
+        ORDER BY commit_sequence ASC
+        LIMIT $${values.length}`,
+      values
+    );
+    return result.rows.map(mapProjectChangeRow);
+  }
 
   async getAccess(
     projectId: string,
@@ -700,7 +948,7 @@ export class PostgresProjectRepository implements ProjectRepository {
   }
 
   async transaction<T>(
-    work: (transaction: ProjectTransaction) => Promise<T>
+    work: (transaction: ProjectSyncTransaction) => Promise<T>
   ): Promise<T> {
     const client = await this.pool.connect();
     try {

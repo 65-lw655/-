@@ -12,6 +12,7 @@ import {
   type ApiServices
 } from "./modules/auth/routes.js";
 import { registerProjectRoutes } from "./modules/projects/routes.js";
+import { registerSyncRoutes } from "./modules/sync/routes.js";
 import { registerUserRoutes } from "./modules/users/routes.js";
 
 const healthSchema = {
@@ -107,6 +108,12 @@ export function buildApp(
     registerAuthRoutes(app, config, services);
     registerUserRoutes(app, config, services);
     registerProjectRoutes(app, config, services);
+    if (services.syncService !== undefined) {
+      registerSyncRoutes(app, config, {
+        ...services,
+        syncService: services.syncService
+      });
+    }
     if (services.close !== undefined) {
       app.addHook("onClose", services.close);
     }

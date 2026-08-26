@@ -8,6 +8,7 @@ import { AuthorizationService } from "./modules/authorization/authorization-serv
 import { MemberService } from "./modules/projects/member-service.js";
 import { PostgresProjectRepository } from "./modules/projects/postgres-project-repository.js";
 import { ProjectService } from "./modules/projects/project-service.js";
+import { SyncService } from "./modules/sync/sync-service.js";
 import { UserService } from "./modules/users/user-service.js";
 import { FileAuthStateStore } from "./storage/file-auth-state-store.js";
 
@@ -46,6 +47,7 @@ export async function createRuntimeServices(
     authorizationService,
     projectService: new ProjectService(repository, authorizationService, store),
     memberService: new MemberService(repository, authorizationService, store),
+    syncService: new SyncService(repository, authorizationService),
     close: () => pool.end()
   };
 }

@@ -4,7 +4,29 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vite --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/index.js"
+    "test": "vitest src",
+    "build:web": "vite build",
+    "build": "vite build",
+    "tauri": "tauri",
+    "verify:platform": "node scripts/verify-platform-config.mjs",
+    "test:rust": "cargo test --locked --manifest-path src-tauri/Cargo.toml",
+    "build:desktop": "tauri build --debug --no-bundle"
+  },
+  "dependencies": {
+    "@project-online/domain": "*",
+    "@project-online/ui": "*",
+    "@tauri-apps/api": "^2.8.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
   }
 }

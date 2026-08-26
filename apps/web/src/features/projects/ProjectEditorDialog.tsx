@@ -1,4 +1,8 @@
 import {
+  ProjectEditorDialog as SharedProjectEditorDialog,
+  type ProjectRepository
+} from "@project-online/ui";
+import {
   PROJECT_STATUSES,
   validateProjectInput,
   type ProjectInput,
@@ -7,6 +11,7 @@ import {
 } from "@project-online/domain";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -19,9 +24,11 @@ import type {
   ProjectDetails,
   ProjectsClient
 } from "./projects-client.js";
+import { createOnlineProjectRepository } from "./online-project-repository.js";
 
 interface SharedProps {
   client: ProjectsClient;
+  repository?: ProjectRepository;
   onClose(): void;
   onSaved(details: ProjectDetails): void;
   onSessionExpired(): void;
@@ -44,16 +51,16 @@ interface ProjectFormState {
   actualCompletionDate: string;
 }
 
-function initialForm(project?: ProjectRecord): ProjectFormState {
+function initialForm(): ProjectFormState {
   return {
-    name: project?.name ?? "",
-    year: project === undefined ? "" : String(project.year),
-    type: project?.type ?? "",
-    status: project?.status ?? PROJECT_STATUSES[0],
-    phase: project?.phase ?? "",
-    filingStatus: project?.filingStatus ?? "",
-    plannedCompletionDate: project?.plannedCompletionDate ?? "",
-    actualCompletionDate: project?.actualCompletionDate ?? ""
+    name: "",
+    year: "",
+    type: "",
+    status: PROJECT_STATUSES[0],
+    phase: "",
+    filingStatus: "",
+    plannedCompletionDate: "",
+    actualCompletionDate: ""
   };
 }
 
@@ -83,6 +90,7 @@ function errorMessage(error: unknown): string {
   if (error instanceof ApiClientError && error.status === 403) {
     return "您没有编辑项目的权限";
   }
+
   return error instanceof ApiClientError
     ? error.message
     : "项目保存失败，请重试";
@@ -97,13 +105,45 @@ function focusableControls(dialog: HTMLElement): HTMLElement[] {
 }
 
 export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
-  const { client, mode, onClose, onSaved, onSessionExpired } = props;
-  const [form, setForm] = useState<ProjectFormState>(() =>
-    initialForm(props.project)
+  const repository = useMemo(
+    () => props.repository ?? createOnlineProjectRepository(props.client),
+    [props.client, props.repository]
   );
+
+  if (props.mode === "edit") {
+    return (
+      <SharedProjectEditorDialog
+        details={{
+          project: props.project,
+          permissions: {
+            canEdit: true,
+            canManageMembers: false,
+            canChangeLifecycle: false,
+            canReadAudit: false
+          }
+        }}
+        onAuthenticationRequired={props.onSessionExpired}
+        onClose={props.onClose}
+        onSaved={props.onSaved}
+        repository={repository}
+        submitLabel="保存修改"
+      />
+    );
+  }
+
+  return <CreateProjectEditorDialog {...props} />;
+}
+
+function CreateProjectEditorDialog({
+  client,
+  onClose,
+  onSaved,
+  onSessionExpired
+}: SharedProps) {
+  const [form, setForm] = useState<ProjectFormState>(initialForm);
   const [owners, setOwners] = useState<MemberCandidate[]>([]);
   const [ownerUserId, setOwnerUserId] = useState("");
-  const [loadingOwners, setLoadingOwners] = useState(mode === "create");
+  const [loadingOwners, setLoadingOwners] = useState(true);
   const [fieldErrors, setFieldErrors] = useState<
     Readonly<Record<string, string>>
   >({});
@@ -133,10 +173,6 @@ export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
   }, []);
 
   useEffect(() => {
-    if (mode !== "create") {
-      return;
-    }
-
     ownersRequest.current ??= client.listInitialOwnerCandidates();
 
     let active = true;
@@ -165,7 +201,7 @@ export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
     return () => {
       active = false;
     };
-  }, [client, mode, onSessionExpired]);
+  }, [client, onSessionExpired]);
 
   function updateField<Key extends keyof ProjectFormState>(
     key: Key,
@@ -189,7 +225,8 @@ export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
       setError("");
       return;
     }
-    if (mode === "create" && ownerUserId === "") {
+
+    if (ownerUserId === "") {
       setFieldErrors({ ownerUserId: "请选择首位负责人" });
       setError("");
       return;
@@ -202,10 +239,7 @@ export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
     setError("");
 
     try {
-      const saved =
-        mode === "create"
-          ? await client.createProject({ project: input, ownerUserId })
-          : await client.updateProject(props.project.id, input);
+      const saved = await client.createProject({ project: input, ownerUserId });
       if (!mounted.current || submissionRequest.current !== requestId) {
         return;
       }
@@ -269,8 +303,6 @@ export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
     }
   }
 
-  const title = mode === "create" ? "新建项目" : "编辑项目";
-
   return (
     <div className="modal-backdrop">
       <div
@@ -281,7 +313,7 @@ export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
         ref={dialogRef}
         role="dialog"
       >
-        <h3 id="project-editor-title">{title}</h3>
+        <h3 id="project-editor-title">新建项目</h3>
         <form className="project-editor-form" onSubmit={handleSubmit}>
           <label>
             <span>项目名称</span>
@@ -379,32 +411,30 @@ export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
               <small>{fieldErrors.actualCompletionDate}</small>
             ) : null}
           </label>
-          {mode === "create" ? (
-            <label className="project-editor-form__wide">
-              <span>首位负责人</span>
-              <select
-                aria-label="首位负责人"
-                aria-invalid={
-                  fieldErrors.ownerUserId === undefined ? undefined : true
-                }
-                disabled={isSubmitting || loadingOwners}
-                onChange={(event) => setOwnerUserId(event.target.value)}
-                value={ownerUserId}
-              >
-                <option value="">
-                  {loadingOwners ? "正在加载负责人" : "请选择负责人"}
+          <label className="project-editor-form__wide">
+            <span>首位负责人</span>
+            <select
+              aria-label="首位负责人"
+              aria-invalid={
+                fieldErrors.ownerUserId === undefined ? undefined : true
+              }
+              disabled={isSubmitting || loadingOwners}
+              onChange={(event) => setOwnerUserId(event.target.value)}
+              value={ownerUserId}
+            >
+              <option value="">
+                {loadingOwners ? "正在加载负责人" : "请选择负责人"}
+              </option>
+              {owners.map((owner) => (
+                <option key={owner.id} value={owner.id}>
+                  {owner.displayName}（{owner.username}）
                 </option>
-                {owners.map((owner) => (
-                  <option key={owner.id} value={owner.id}>
-                    {owner.displayName}（{owner.username}）
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.ownerUserId ? (
-                <small role="alert">{fieldErrors.ownerUserId}</small>
-              ) : null}
-            </label>
-          ) : null}
+              ))}
+            </select>
+            {fieldErrors.ownerUserId ? (
+              <small role="alert">{fieldErrors.ownerUserId}</small>
+            ) : null}
+          </label>
           {error ? (
             <p className="form-error project-editor-form__wide" role="alert">
               {error}
@@ -421,16 +451,10 @@ export function ProjectEditorDialog(props: ProjectEditorDialogProps) {
             </button>
             <button
               className="primary-button"
-              disabled={isSubmitting || (mode === "create" && loadingOwners)}
+              disabled={isSubmitting || loadingOwners}
               type="submit"
             >
-              {isSubmitting
-                ? mode === "create"
-                  ? "创建中"
-                  : "保存中"
-                : mode === "create"
-                  ? "创建项目"
-                  : "保存修改"}
+              {isSubmitting ? "创建中" : "创建项目"}
             </button>
           </div>
         </form>
