@@ -278,7 +278,7 @@ impl LocalDatabase {
                 .optional()
                 .map_err(LocalDbError::LocalWriteFailed)?;
 
-            if exists.map_or(true, |current| revision > current) {
+            if exists.is_none_or(|current| revision > current) {
                 if exists.is_some() {
                     transaction
                         .execute(
