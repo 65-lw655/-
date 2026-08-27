@@ -15,3 +15,10 @@
 
 `.github/workflows/desktop-verify.yml` 已配置 `windows-latest` 矩阵，包含前端门禁、Rust 测试、Clippy 和 Tauri debug no-bundle 构建。当前仓库没有远程 CI 运行证据，且本次验收环境为 macOS，因此 Windows 实机/CI 结果仍需在 GitHub Actions 中运行后确认，不能在本地宣称通过。
 
+2026-08-27 已在 GitHub Actions 实跑确认：
+
+- `Desktop (windows-latest)`：前端门禁、Rust 测试、Clippy、Tauri debug no-bundle 构建全部通过。
+- `Desktop (macos-latest)`：同一矩阵全部通过。
+- 运行记录：[Desktop Verify #33054114850](https://github.com/65-lw655/-/actions/runs/33054114850)
+
+Windows CI 门禁已关闭，M4 平台验收完成。
