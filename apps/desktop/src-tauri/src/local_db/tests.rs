@@ -781,6 +781,36 @@ fn sync_state_acknowledges_outbox_and_persists_pull_cursor() {
     assert_eq!(db.pull_cursor().expect("read cursor"), 12);
 }
 
+#[test]
+fn sync_state_discards_forbidden_outbox_and_locks_project() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let db_path = temp_dir.path().join("local.sqlite");
+    let db = LocalDatabase::open(&db_path).expect("open local database");
+    let project_id = "00000000-0000-0000-0000-000000000013";
+    insert_project_fixture(
+        &db_path,
+        ProjectFixture {
+            id: project_id,
+            name: "无权限项目",
+            year: 2026,
+            status: "施工中",
+            lifecycle: "ACTIVE",
+            local_updated_at: "2026-08-24T10:00:00.000Z",
+            commit_sequence: 1,
+            sync_state: "PENDING",
+            can_edit: 1,
+        },
+    );
+    insert_outbox_fixture(&db_path, "op-forbidden", project_id);
+
+    db.discard_outbox("op-forbidden", project_id, "FORBIDDEN")
+        .expect("discard forbidden outbox");
+    assert!(db.pending_outbox(10).expect("read outbox").is_empty());
+    let project = db.get_project(project_id).expect("read locked project");
+    assert_eq!(project.sync_state, "SYNCED");
+    assert!(!project.permissions.can_edit);
+}
+
 fn insert_outbox_fixture(path: &Path, operation_id: &str, project_id: &str) {
     let connection = rusqlite::Connection::open(path).expect("open sqlite");
     connection

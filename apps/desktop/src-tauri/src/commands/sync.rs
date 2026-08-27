@@ -84,6 +84,19 @@ pub fn record_outbox_failure(
 }
 
 #[tauri::command]
+pub fn discard_outbox(
+    state: State<'_, DesktopState>,
+    operation_id: String,
+    project_id: String,
+    reason: String,
+) -> Result<(), CommandError> {
+    state
+        .database()?
+        .discard_outbox(&operation_id, &project_id, &reason)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
 pub fn get_sync_cursor(state: State<'_, DesktopState>) -> Result<i64, CommandError> {
     state.database()?.pull_cursor().map_err(Into::into)
 }

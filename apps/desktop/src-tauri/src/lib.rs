@@ -34,6 +34,7 @@ pub fn run() {
         commands::sync::list_pending_outbox,
         commands::sync::acknowledge_outbox,
         commands::sync::record_outbox_failure,
+        commands::sync::discard_outbox,
         commands::sync::get_sync_cursor,
         commands::sync::advance_sync_cursor,
         commands::sync::apply_project_change
@@ -51,6 +52,7 @@ pub fn run() {
         commands::sync::list_pending_outbox,
         commands::sync::acknowledge_outbox,
         commands::sync::record_outbox_failure,
+        commands::sync::discard_outbox,
         commands::sync::get_sync_cursor,
         commands::sync::advance_sync_cursor,
         commands::sync::apply_project_change

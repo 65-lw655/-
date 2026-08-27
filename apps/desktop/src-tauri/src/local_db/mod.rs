@@ -211,6 +211,33 @@ impl LocalDatabase {
         Ok(())
     }
 
+    pub fn discard_outbox(
+        &self,
+        operation_id: &str,
+        project_id: &str,
+        _reason: &str,
+    ) -> Result<(), LocalDbError> {
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(LocalDbError::LocalWriteFailed)?;
+        transaction
+            .execute(
+                "DELETE FROM sync_outbox WHERE operation_id = ?1",
+                params![operation_id],
+            )
+            .map_err(LocalDbError::LocalWriteFailed)?;
+        transaction
+            .execute(
+                "UPDATE local_projects
+                 SET sync_state = 'SYNCED', can_edit = 0
+                 WHERE id = ?1",
+                params![project_id],
+            )
+            .map_err(LocalDbError::LocalWriteFailed)?;
+        transaction.commit().map_err(LocalDbError::LocalWriteFailed)
+    }
+
     pub fn pull_cursor(&self) -> Result<i64, LocalDbError> {
         self.connection
             .query_row(

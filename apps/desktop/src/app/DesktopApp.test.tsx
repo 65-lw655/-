@@ -104,7 +104,7 @@ describe("DesktopApp", () => {
     expect(screen.getByRole("heading", { name: "本机项目" })).toBeVisible();
     expect(await screen.findByText("示例-离线本地项目")).toBeVisible();
     expect(screen.getByText("本机数据已就绪")).toBeVisible();
-    expect(screen.getByText("M4 暂不自动上传")).toBeVisible();
+    expect(screen.getByText("同步已就绪")).toBeVisible();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

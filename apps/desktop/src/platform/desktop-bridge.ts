@@ -35,6 +35,11 @@ export interface DesktopBridge {
   pendingOutbox?(limit: number): Promise<PendingOutboxItem[]>;
   acknowledgeOutbox?(operationId: string): Promise<void>;
   recordOutboxFailure?(operationId: string, message: string): Promise<void>;
+  discardOutbox?(
+    operationId: string,
+    projectId: string,
+    reason: string
+  ): Promise<void>;
   getSyncCursor?(): Promise<number>;
   advanceSyncCursor?(cursor: number): Promise<void>;
   applyProjectChange?(input: {
@@ -74,6 +79,8 @@ export function createDesktopBridge(
       invokeCommand<void>("acknowledge_outbox", { operationId }),
     recordOutboxFailure: (operationId, message) =>
       invokeCommand<void>("record_outbox_failure", { operationId, message }),
+    discardOutbox: (operationId, projectId, reason) =>
+      invokeCommand<void>("discard_outbox", { operationId, projectId, reason }),
     getSyncCursor: () => invokeCommand<number>("get_sync_cursor"),
     advanceSyncCursor: (cursor) =>
       invokeCommand<void>("advance_sync_cursor", { cursor }),

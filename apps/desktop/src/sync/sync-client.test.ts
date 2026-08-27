@@ -45,6 +45,7 @@ function bridge(): SyncBridge {
     pendingOutbox: vi.fn(async () => [pending]),
     acknowledgeOutbox: vi.fn(async () => undefined),
     recordOutboxFailure: vi.fn(async () => undefined),
+    discardOutbox: vi.fn(async () => undefined),
     getSyncCursor: vi.fn(async () => 0),
     advanceSyncCursor: vi.fn(async () => undefined),
     applyProjectChange: vi.fn(async () => undefined)
@@ -133,5 +134,152 @@ describe("syncProjectsOnce", () => {
       "offline"
     );
     expect(local.acknowledgeOutbox).not.toHaveBeenCalled();
+  });
+
+  it("retries a retryable push result before acknowledging the operation", async () => {
+    const local = bridge();
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response({
+          protocolVersion: 1,
+          results: [
+            {
+              operationId: operation.operationId,
+              status: "RETRYABLE",
+              entityId: operation.entityId
+            }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        response({
+          protocolVersion: 1,
+          results: [
+            {
+              operationId: operation.operationId,
+              status: "ACCEPTED",
+              entityId: operation.entityId,
+              revision: 2,
+              commitSequence: 10
+            }
+          ]
+        })
+      )
+      .mockResolvedValue(
+        response({
+          protocolVersion: 1,
+          changes: [],
+          nextCursor: 10,
+          hasMore: false
+        })
+      );
+
+    await expect(
+      syncProjectsOnce({
+        bridge: local,
+        endpoint: "https://api.example.test",
+        fetchImpl,
+        retryDelaysMs: [0]
+      })
+    ).resolves.toMatchObject({ pushed: 1, failed: 0 });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(local.acknowledgeOutbox).toHaveBeenCalledWith(operation.operationId);
+  });
+
+  it("surfaces invalid sessions without retrying", async () => {
+    const local = bridge();
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(response({ code: "INVALID_SESSION" }, 401));
+
+    await expect(
+      syncProjectsOnce({
+        bridge: local,
+        endpoint: "https://api.example.test",
+        fetchImpl,
+        retryDelaysMs: [0]
+      })
+    ).rejects.toMatchObject({ code: "INVALID_SESSION" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(local.acknowledgeOutbox).not.toHaveBeenCalled();
+  });
+
+  it("quarantines a permanently forbidden operation instead of retrying it", async () => {
+    const local = bridge();
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response({
+          protocolVersion: 1,
+          results: [
+            {
+              operationId: operation.operationId,
+              status: "FORBIDDEN",
+              entityId: operation.entityId
+            }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        response({
+          protocolVersion: 1,
+          changes: [],
+          nextCursor: 0,
+          hasMore: false
+        })
+      );
+
+    await expect(
+      syncProjectsOnce({
+        bridge: local,
+        endpoint: "https://api.example.test",
+        fetchImpl,
+        retryDelaysMs: [0]
+      })
+    ).resolves.toMatchObject({ pushed: 0, failed: 1 });
+    expect(local.discardOutbox).toHaveBeenCalledWith(
+      operation.operationId,
+      operation.projectId,
+      "FORBIDDEN"
+    );
+    expect(local.acknowledgeOutbox).not.toHaveBeenCalled();
+  });
+
+  it("continues pulling pages until the server reports no more changes", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response({
+          protocolVersion: 1,
+          changes: [],
+          nextCursor: 1,
+          hasMore: true
+        })
+      )
+      .mockResolvedValueOnce(
+        response({
+          protocolVersion: 1,
+          changes: [
+            {
+              type: "PROJECT_ACCESS_REVOKED",
+              projectId: operation.projectId,
+              commitSequence: 2
+            }
+          ],
+          nextCursor: 2,
+          hasMore: false
+        })
+      );
+
+    await expect(
+      syncProjectsOnce({
+        bridge: { ...bridge(), pendingOutbox: vi.fn(async () => []) },
+        endpoint: "https://api.example.test",
+        fetchImpl,
+        retryDelaysMs: [0]
+      })
+    ).resolves.toMatchObject({ pulled: 1, cursor: 2 });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 });
